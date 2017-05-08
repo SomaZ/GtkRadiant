@@ -25,6 +25,8 @@
 
 void Entity_UpdateClass( entity_t *e, const char* value ){
 	if ( strcmp( value, "misc_model" ) == 0
+		 || ( strcmp( value, "misc_model_static" ) == 0 )
+		 || ( strcmp( value, "misc_model_breakable" ) == 0 )
 		 || ( strcmp( value, "misc_gamemodel" ) == 0 )
 		 || ( strcmp( value, "model_static" ) == 0 ) ) {
 		if ( e->model.pRender ) {
