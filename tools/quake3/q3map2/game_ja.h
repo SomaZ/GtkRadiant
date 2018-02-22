@@ -45,6 +45,7 @@
 #define JA_CONT_INSIDE          0x10000000  /* jedi academy 'inside' */
 #define JA_SURF_FORCESIGHT      0x02000000  /* jedi academy 'forcesight' */
 
+#define DF2_CONT_BATTERYACID    0x00200000  /* jedi academy - df2 mod 'batteryacid' */
 
 
 /* -------------------------------------------------------------------------------
@@ -141,6 +142,9 @@
 		/* jedi academy */
 		{ "inside",         JA_CONT_INSIDE,             0,                          0,                          0,                          0,                          0 },
 		{ "forcesight",     0,                          0,                          JA_SURF_FORCESIGHT,         0,                          0,                          0 },
+
+		/* jedi academy - df2 mod */
+		{ "batteryacid",    DF2_CONT_BATTERYACID,       S_CONT_SOLID,               0,                          0,                          C_LIQUID | C_TRANSLUCENT,   C_SOLID },
 
 		/* materials */
 		{ "*mat_none",      0,                          0,                          S_MAT_NONE,                 S_MAT_MASK,                 0,                          0 },
