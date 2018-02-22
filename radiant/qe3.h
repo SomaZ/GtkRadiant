@@ -30,8 +30,6 @@
 #pragma warning(disable : 4051)     // ALPHA
 #pragma warning(disable : 4800)
 
-#define _CRT_SECURE_NO_WARNINGS
-
 #endif
 
 // for interfaces, we require main plugin header included
@@ -132,9 +130,6 @@ extern vec_t g_MaxBrushSize;
 
 #include "undo.h"
 #include "glwidget.h"
-
-// the dec offsetof macro doesn't work very well...
-#define myoffsetof( type,identifier ) ( (size_t)&( (type *)0 )->identifier )
 
 // set these before calling CheckParm
 extern int myargc;
@@ -259,8 +254,11 @@ void MRU_AddFile( const char *str );
 void MRU_Activate( int index );
 
 
-void FillTextureMenu( GSList** pArray = NULL );
 void FillBSPMenu( void );
+void ClearGSList( GSList *lst );
+void FillTextureList( GSList** pArray );
+void FillTextureMenu( GSList *texdirs );
+void FillTextureDirListWidget( GSList *texdirs );
 
 // profile functions - kind of utility lib
 // they are kind of dumb, they expect to get the path to the .ini file or to the prefs directory when called

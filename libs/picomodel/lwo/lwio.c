@@ -22,7 +22,6 @@
    read requests until flen is reset.
    ====================================================================== */
 
-#define INT_MIN     ( -2147483647 - 1 ) /* minimum (signed) int value */
 #define FLEN_ERROR INT_MIN
 
 static int flen;
@@ -451,7 +450,7 @@ char *sgetS0( unsigned char **bp ){
 		return NULL;
 	}
 
-	len = strlen( (char *) buf ) + 1;
+	len = strlen( (const char *) buf ) + 1;
 	if ( len == 1 ) {
 		flen += 2;
 		*bp += 2;

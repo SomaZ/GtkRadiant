@@ -19,6 +19,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include "../common/cmdlib.h"
 #include "p3dlib.h"
 
 #ifdef WIN32
@@ -30,7 +31,7 @@
 
 #define MAX_POLYSETS 64
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 #define _strcmpi Q_stricmp
 #define filelength Q_filelength
 #define strlwr strlower

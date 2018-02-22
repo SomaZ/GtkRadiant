@@ -155,7 +155,9 @@ static void DoProjectAddEdit( bool edit, GtkWidget *parent ){
 	gtk_widget_show( label );
 
 	text = gtk_entry_new();
-	g_object_set_data( G_OBJECT( dialog ), "text", text );
+	gtk_table_attach( GTK_TABLE( table ), text, 1, 2, 0, 1,
+					  (GtkAttachOptions) ( GTK_EXPAND | GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( text );
 	g_object_set_data( G_OBJECT( dialog ), "text", text );
 
@@ -375,10 +377,13 @@ game_t gameList[] = {
 	{ "sof2.game", sSOF2ModComboItem, "", qfalse, qtrue },
 
 	{ "q2.game", "Quake II", "baseq2", qtrue, qfalse },
-	{ "q2.game", "Capture The Flag", "ctf", qfalse, qfalse },
+	{ "q2.game", "Quake II: Threewave CTF", "ctf", qfalse, qfalse },
 	{ "q2.game", "Quake II Mission Pack: The Reckoning", "xatrix", qfalse, qfalse },
 	{ "q2.game", "Quake II Mission Pack: Ground Zero", "rogue", qfalse, qfalse },
 	{ "q2.game", "Custom Quake II modification", "", qfalse, qtrue },
+
+	{ "unvanquished.game", "Unvanquished", "pkg", qtrue, qfalse },
+	{ "unvanquished.game", "Unvanquished from source", "src", qfalse, qfalse },
 
 };
 
@@ -843,10 +848,14 @@ void DoProjectSettings(){
 		}
 
 		if( gamemode_list ) {
-			const char *selected_mode;
 			const char *new_mode;
-			
+#if GTK_CHECK_VERSION( 3, 0, 0 )
+			const char *selected_mode;
+			selected_mode = gtk_combo_box_get_active_id( GTK_COMBO_BOX( gamemode_combo ) );
+#else
+			char *selected_mode;
 			selected_mode = gtk_combo_box_text_get_active_text( GTK_COMBO_BOX_TEXT( gamemode_combo ) );
+#endif
 			new_mode = NULL;
 
 			if( !selected_mode ) {
@@ -855,8 +864,12 @@ void DoProjectSettings(){
 				for( lst = gamemode_list; lst != NULL; lst = g_list_next( lst ) )
 				{
 					const gamemode_t *gamemode_x = (const gamemode_t *)lst->data;
+#if GTK_CHECK_VERSION( 3, 0, 0 )
 					if( strcmp( g_pGameDescription->mGameFile.GetBuffer(), gamemode_x->gameFile ) == 0 && strcmp( gamemode_x->mode, selected_mode ) == 0 ) {
-						new_mode = selected_mode;
+#else
+					if( strcmp( g_pGameDescription->mGameFile.GetBuffer(), gamemode_x->gameFile ) == 0 && strcmp( gamemode_x->name, selected_mode ) == 0 ) {
+#endif
+						new_mode = gamemode_x->mode;
 						break;
 					}
 				}
@@ -1164,9 +1177,66 @@ static void entitylist_multiselect( GtkWidget *widget, gpointer data ) {
 	Sys_UpdateWindows( W_ALL );
 }
 
+static void entity_focus_2d( entity_t *pEntity ) {
+	if ( pEntity ) {
+		for ( epair_t* pEpair = pEntity->epairs; pEpair; pEpair = pEpair->next )
+		{
+			brush_t *b;
+
+			b = pEntity->brushes.onext;
+			if ( b ) {
+				int i;
+				for ( i = 0; i < 3; i++ )
+				{
+					if ( g_pParentWnd->GetXYWnd() ) {
+						g_pParentWnd->GetXYWnd()->GetOrigin()[i] = ( b->mins[i] + b->maxs[i] ) / 2;
+					}
+					if ( g_pParentWnd->GetXZWnd() ) {
+						g_pParentWnd->GetXZWnd()->GetOrigin()[i] = ( b->mins[i] + b->maxs[i] ) / 2;
+					}
+					if ( g_pParentWnd->GetYZWnd() ) {
+						g_pParentWnd->GetYZWnd()->GetOrigin()[i] = ( b->mins[i] + b->maxs[i] ) / 2;
+					}
+				}
+			}
+			Sys_UpdateWindows( W_ALL );
+		}
+	}
+}
+
+static void entitylist_focus( GtkWidget *widget, gpointer data ){
+	GtkTreeView* view = GTK_TREE_VIEW( g_object_get_data( G_OBJECT( data ), "entities" ) );
+
+	GtkTreeSelection* selection = gtk_tree_view_get_selection( view );
+
+	GtkTreeModel* model;
+	GtkTreeIter selected;
+	entity_t* pEntity;
+
+	if ( gtk_tree_selection_get_mode( selection ) == GTK_SELECTION_MULTIPLE ) {
+		GList *rows, *first;
+		rows = gtk_tree_selection_get_selected_rows( selection, &model );
+		//only the keys/values of the last selected node with entity
+		first = g_list_first( rows );
+		if ( first ) {
+			if ( gtk_tree_model_get_iter( model, &selected, (GtkTreePath *)first->data ) == TRUE ) {
+				gtk_tree_model_get( model, &selected, 1, &pEntity, -1 );
+				entity_focus_2d( pEntity );
+			}
+		}
+		g_list_free_full( rows, (GDestroyNotify)gtk_tree_path_free );
+
+	} else if ( gtk_tree_selection_get_selected( selection, &model, &selected ) ) {
+
+		gtk_tree_model_get( model, &selected, 1, &pEntity, -1 );
+
+		entity_focus_2d( pEntity );
+	}
+}
+
 static gint entitylist_click( GtkWidget *widget, GdkEventButton *event, gpointer data ){
 	if ( event->type == GDK_2BUTTON_PRESS ) {
-		entitylist_select( NULL, data );
+		entitylist_multiselect( NULL, data );
 		return TRUE;
 	}
 	return FALSE;
@@ -1240,7 +1310,7 @@ static void EnitityList_response( GtkDialog *dialog, gint response_id, gpointer 
 }
 void DoEntityList(){
 	static GtkWidget *dialog;
-	GtkWidget *vbox, *hbox, *hbox2, *button, *scr, *content_area;
+	GtkWidget *vbox, *hbox, *hbox2, *button, *scr, *content_area, *paned;
 	GtkWidget *notebook, *label, *textview, *keyvalue_scr, *desc_scr;
 	gint keyvalue_index;
 	GtkDialogFlags flags = GTK_DIALOG_DESTROY_WITH_PARENT;
@@ -1258,13 +1328,12 @@ void DoEntityList(){
 
 	content_area = gtk_dialog_get_content_area( GTK_DIALOG( dialog ) );
 
-	hbox = gtk_hbox_new( TRUE, 5 );
-	gtk_container_add( GTK_CONTAINER( content_area ), hbox );
-	gtk_container_set_border_width( GTK_CONTAINER( hbox ), 5 );
-	gtk_widget_show( hbox );
+	paned = gtk_hpaned_new();
+	gtk_box_pack_start( GTK_BOX( content_area ), paned, TRUE, TRUE, 0 );
+	gtk_widget_show( paned );
 
 	scr = gtk_scrolled_window_new( (GtkAdjustment*)NULL, (GtkAdjustment*)NULL );
-	gtk_box_pack_start( GTK_BOX( hbox ), scr, TRUE, TRUE, 0 );
+	gtk_paned_pack1( GTK_PANED( paned ), scr, FALSE, TRUE );
 	gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW( scr ), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC );
 	gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW( scr ), GTK_SHADOW_IN );
 	gtk_widget_show( scr );
@@ -1350,7 +1419,7 @@ void DoEntityList(){
 	}
 
 	vbox = gtk_vbox_new( FALSE, 5 );
-	gtk_box_pack_start( GTK_BOX( hbox ), vbox, TRUE, TRUE, 0 );
+	gtk_paned_pack2( GTK_PANED( paned ), vbox, FALSE, TRUE );
 	gtk_widget_show( vbox );
 
 	notebook = gtk_notebook_new();
@@ -1425,6 +1494,12 @@ void DoEntityList(){
 	g_signal_connect( G_OBJECT( button ), "clicked",
 						G_CALLBACK( entitylist_multiselect ), dialog );
 	gtk_widget_set_size_request( button, 60, -1 );
+	gtk_widget_show( button );
+
+	button = gtk_button_new_with_label( _( "Focus 2D View" ) );
+	gtk_box_pack_start( GTK_BOX( hbox2 ), button, FALSE, FALSE, 0 );
+	g_signal_connect( G_OBJECT( button ), "clicked", 
+						G_CALLBACK( entitylist_focus ), dialog );
 	gtk_widget_show( button );
 
 
@@ -1587,7 +1662,8 @@ void DoGamma(){
 
 	content_area = gtk_dialog_get_content_area( GTK_DIALOG( dialog ) );
 
-	vbox = gtk_vbox_new( TRUE, 5 );
+	vbox = gtk_vbox_new( FALSE, 5 );
+	gtk_box_set_homogeneous( GTK_BOX( vbox ), TRUE );
 	gtk_container_add( GTK_CONTAINER( content_area ), vbox );
 	gtk_container_set_border_width( GTK_CONTAINER( vbox ), 5 );
 	gtk_widget_show( vbox );
@@ -2584,18 +2660,15 @@ void DoTextureListDlg(){
 
 		{
 			// Initialize dialog
-			GSList *textures = (GSList*)NULL;
-			FillTextureMenu( &textures );
-			while ( textures != NULL )
+			GSList *texdirs = NULL, *dir;
+			FillTextureList( &texdirs );
+			for( dir = texdirs; dir != NULL; dir = g_slist_next( dir ) )
 			{
-				{
-					GtkTreeIter iter;
-					gtk_list_store_append( store, &iter );
-					gtk_list_store_set( store, &iter, 0, (gchar*)textures->data, -1 );
-				}
-				free( textures->data );
-				textures = g_slist_remove( textures, textures->data );
+				GtkTreeIter iter;
+				gtk_list_store_append( store, &iter );
+				gtk_list_store_set( store, &iter, 0, (gchar*)dir->data, -1 );
 			}
+			ClearGSList( texdirs );
 		}
 
 		g_object_unref( G_OBJECT( store ) );
@@ -3537,7 +3610,8 @@ int DoLightIntensityDlg( int *intensity ){
 	gtk_misc_set_alignment( GTK_MISC( label ), 0.0, 0.5 );
 	gtk_widget_show( label );
 
-	hbox = gtk_hbox_new( TRUE, 5 );
+	hbox = gtk_hbox_new( FALSE, 5 );
+	gtk_box_set_homogeneous( GTK_BOX( hbox ), TRUE );
 	gtk_box_pack_start( GTK_BOX( vbox ), hbox, TRUE, TRUE, 0 );
 	gtk_container_set_border_width( GTK_CONTAINER( hbox ), 5 );
 	gtk_widget_show( hbox );
@@ -3556,6 +3630,7 @@ int DoLightIntensityDlg( int *intensity ){
 	response_id = gtk_dialog_run( GTK_DIALOG( dialog ) );
 
 	if( response_id == GTK_RESPONSE_OK ) {
+		gtk_spin_button_update( GTK_SPIN_BUTTON( spinbutton ) );
 		*intensity = gtk_spin_button_get_value_as_int( GTK_SPIN_BUTTON( spinbutton ) );
 		ret = IDOK;
 	} else {

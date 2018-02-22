@@ -24,7 +24,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
   #include <dirent.h>
   #include <sys/time.h>
 #endif
@@ -91,8 +91,27 @@ virtual void addType( const char* key, filetype_t type ){
 }
 virtual void getTypeList( const char* key, IFileTypeList* typelist ){
 	filetype_list_t& list_ref = m_typelists[key];
-	for ( unsigned int i = 0; i < list_ref.size(); ++i )
+
+	if (key == "model") {
+		// Get the list of all supported types (adapted from kaz)
+		CString allTypesFilter;
+		for (unsigned int i = 0; i < list_ref.size(); ++i) {
+			allTypesFilter += list_ref[i].getType().pattern;
+			if (i < list_ref.size() - 1) {
+				allTypesFilter += ";";
+			}
+		}
+
+		// Add the item on top
+		// TODO: Make is translatable
+		typelist->addType(filetype_t("All supported types", allTypesFilter.GetBuffer()));
+	}
+
+	// Then add the supported types one by one
+	// TODO: Sort them alphabetically (have them sorted in m_typelists[key])
+	for ( unsigned int i = 0; i < list_ref.size(); ++i ) {
 		typelist->addType( list_ref[i].getType() );
+	}
 }
 private:
 struct filetype_copy_t
@@ -448,10 +467,10 @@ void CRadiantPluginManager::PopulateMenu(){
 }
 
 void CSynapseClientRadiant::ImportMap( IDataStream *in, CPtrArray *ents, const char *type ){
-	if ( strcmp( type,"map" ) == 0 ) {
+	if ( strcasecmp( type, "map" ) == 0 ) {
 		g_MapTable.m_pfnMap_Read( in, ents );
 	}
-	else if ( strcmp( type,"xmap" ) == 0 ) {
+	else if (strcasecmp( type,"xmap" ) == 0 ) {
 		g_MapTable2.m_pfnMap_Read( in, ents );
 	}
 	else{
@@ -460,10 +479,10 @@ void CSynapseClientRadiant::ImportMap( IDataStream *in, CPtrArray *ents, const c
 }
 
 void CSynapseClientRadiant::ExportMap( CPtrArray *ents, IDataStream *out, const char *type ){
-	if ( strcmp( type,"map" ) == 0 ) {
+	if (strcasecmp( type,"map" ) == 0 ) {
 		g_MapTable.m_pfnMap_Write( ents, out );
 	}
-	else if ( strcmp( type,"xmap" ) == 0 ) {
+	else if (strcasecmp( type,"xmap" ) == 0 ) {
 		g_MapTable2.m_pfnMap_Write( ents, out );
 	}
 	else{
@@ -1879,7 +1898,7 @@ void CPlugInManager::CommitPatchHandleToEntity( int index, patchMesh_t *pMesh, c
 
 #if 0
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
   #include <gdk/gdkx.h>
 
 XVisualInfo* QEX_ChooseVisual( bool zbuffer ){

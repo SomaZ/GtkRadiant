@@ -30,7 +30,7 @@
 #include <sys/stat.h>
 #include "gtkmisc.h"
 #include <glib/gi18n.h>
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 #include <unistd.h>
 #include <X11/keysym.h>
 #include <gdk/gdkx.h>
@@ -171,7 +171,7 @@ void Map_Snapshot(){
 		bGo = ( _mkdir( strOrgPath ) != -1 );
 #endif
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		bGo = ( mkdir( strOrgPath,0755 ) != -1 );
 #endif
 	}
@@ -288,7 +288,7 @@ int BuildShortPathName( const char* pPath, char* pBuffer, int nBufferLen ){
 }
 #endif
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 int BuildShortPathName( const char* pPath, char* pBuffer, int nBufferLen ){
 	// remove /../ from directories
 	const char *scr = pPath; char *dst = pBuffer;
@@ -823,6 +823,10 @@ void QE_InitVFS( void ){
 	// *nix systems have a dual filesystem in ~/.q3a, which is searched first .. so we need to add that too
 	Str directory,prefabs;
 
+	Str basePakPath = g_strAppPath.GetBuffer();
+	basePakPath += "base";
+	vfsInitDirectory( basePakPath.GetBuffer() );
+
 	// TTimo: let's leave this to HL mode for now
 	if ( g_pGameDescription->mGameFile == "hl.game" ) {
 		// Hydra: we search the "gametools" path first so that we can provide editor
@@ -902,7 +906,10 @@ void QE_Init( void ){
 	FillClassList();    // list in entity window
 	Map_Init();
 
-	FillTextureMenu();
+	GSList *texdirs = NULL;
+	FillTextureList( &texdirs );
+	FillTextureMenu( texdirs );
+	ClearGSList( texdirs );
 	FillBSPMenu();
 
 	/*
@@ -1205,29 +1212,29 @@ bool Sys_AltDown(){
 	return ( GetKeyState( VK_MENU ) & 0x8000 ) != 0;
 #endif
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 	char keys[32];
 	int x;
 
-	XQueryKeymap( GDK_DISPLAY(), keys );
+	XQueryKeymap( gdk_x11_get_default_xdisplay(), keys );
 
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Alt_L );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Alt_L );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
 
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Alt_R );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Alt_R );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
 
 	// For Apple, let users use their Command keys since Alt + X11 is hosed
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Meta_L );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Meta_L );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
 
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Meta_R );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Meta_R );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
@@ -1241,18 +1248,18 @@ bool Sys_ShiftDown(){
 	return ( GetKeyState( VK_SHIFT ) & 0x8000 ) != 0;
 #endif
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 	char keys[32];
 	int x;
 
-	XQueryKeymap( GDK_DISPLAY(), keys );
+	XQueryKeymap( gdk_x11_get_default_xdisplay(), keys );
 
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Shift_L );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Shift_L );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
 
-	x = XKeysymToKeycode( GDK_DISPLAY(), XK_Shift_R );
+	x = XKeysymToKeycode( gdk_x11_get_default_xdisplay(), XK_Shift_R );
 	if ( keys[x / 8] & ( 1 << ( x % 8 ) ) ) {
 		return true;
 	}
@@ -1326,7 +1333,7 @@ void Sys_SetCursorPos( int x, int y ){
 }
 
 void Sys_Beep( void ){
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 	gdk_beep();
 #else
 	MessageBeep( MB_ICONASTERISK );
@@ -1699,7 +1706,7 @@ void Sys_LogFile( void ){
 		Str name;
 		name = g_strTempPath;
 		name += "radiant.log";
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		g_qeglobals.hLogFile = open( name.GetBuffer(), O_TRUNC | O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 #endif
 #ifdef _WIN32
@@ -1726,7 +1733,7 @@ void Sys_LogFile( void ){
 		#ifdef _WIN32
 		_close( g_qeglobals.hLogFile );
 		#endif
-		#if defined ( __linux__ ) || defined ( __APPLE__ )
+		#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		close( g_qeglobals.hLogFile );
 		#endif
 		g_qeglobals.hLogFile = 0;
@@ -1754,7 +1761,7 @@ extern "C" void Sys_FPrintf_VA( int level, const char *text, va_list args ) {
 		_write( g_qeglobals.hLogFile, buf, length );
 		_commit( g_qeglobals.hLogFile );
 #endif
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		write( g_qeglobals.hLogFile, buf, length );
 #endif
 	}

@@ -113,11 +113,10 @@
 
 #define PATH_SEP '\\'
 
-#endif
 
 //======================= MAC OS X SERVER DEFINES =====================
 
-#if defined( __MACH__ ) && defined( __APPLE__ )
+#elif defined( __MACH__ ) && defined( __APPLE__ )
 
 #define MAC_STATIC
 
@@ -152,12 +151,12 @@ void osxFreeMemory( void *pointer );
 }
 #endif
 
-#endif
-
 //======================= MAC DEFINES =================================
 
-#ifdef __MACOS__
+#elif defined( __MACOS__ )
 
+// the mac compiler can't handle >32k of locals, so we
+// just waste space and make big arrays static...
 #define MAC_STATIC static
 
 #define CPUSTRING   "MacOS-PPC"
@@ -166,9 +165,8 @@ void osxFreeMemory( void *pointer );
 
 void Sys_PumpEvents( void );
 
-#endif
 
-#ifdef __MRC__
+#elif defined( __MRC__ )
 
 #define MAC_STATIC
 
@@ -182,13 +180,10 @@ void Sys_PumpEvents( void );
 #define QDECL   __cdecl
 
 #define _alloca alloca
-#endif
 
 //======================= LINUX DEFINES =================================
 
-// the mac compiler can't handle >32k of locals, so we
-// just waste space and make big arrays static...
-#ifdef __linux__
+#elif defined( __linux__ )
 
 #define MAC_STATIC
 
@@ -202,9 +197,25 @@ void Sys_PumpEvents( void );
 
 #define PATH_SEP '/'
 
+//======================= FreeBSD DEFINES =================================
+
+#elif defined( __FreeBSD__ )
+
+#define MAC_STATIC
+
+#ifdef __i386__
+#define CPUSTRING   "FreeBSD-i386"
+#else
+#define CPUSTRING   "FreeBSD-other"
 #endif
 
+#define PATH_SEP '/'
+
 //=============================================================
+
+#else
+	#error unknown architecture
+#endif
 
 typedef enum {qfalse, qtrue}    qboolean;
 

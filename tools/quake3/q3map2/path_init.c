@@ -98,10 +98,11 @@ void LokiInitPaths( char *argv0 ){
 	/* this is kinda crap, but hey */
 	strcpy( installPath, "../" );
 	#else
+
 	char temp[ MAX_OS_PATH ];
-	char        *home;
-	char        *path;
-	char        *last;
+	char *home;
+	char *path;
+	char *last;
 	qboolean found;
 
 
@@ -326,7 +327,6 @@ void InitPaths( int *argc, char **argv ){
 	int i, j, k, len, len2;
 	char temp[ MAX_OS_PATH ];
 
-
 	/* note it */
 	Sys_FPrintf( SYS_VRB, "--- InitPaths ---\n" );
 
@@ -452,12 +452,6 @@ void InitPaths( int *argc, char **argv ){
 		{
 			/* create a full path and initialize it */
 			sprintf( temp, "%s/%s/", basePaths[ i ], gamePaths[ j ] );
-			//quick n dirty patch to enable vfs for quakelive
-			if (strcmp(game->arg, "quakelive") == 0 ) {
-				unz_GAME_QL = 1;
-			} else {
-				unz_GAME_QL = 0;
-			}
 			vfsInitDirectory( temp );
 		}
 	}

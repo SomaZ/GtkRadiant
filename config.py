@@ -20,14 +20,30 @@ class Config:
         self.config_selected = [ 'release' ]
         # those are global to each config
         self.platform = platform.system()
-        self.cc = 'gcc'
-        self.cxx = 'g++'
+        if ( self.platform == 'FreeBSD' ):
+            self.cc = 'cc'
+            self.cxx = 'c++'
+        else:
+            self.cc = 'gcc'
+            self.cxx = 'g++'
         self.install_directory = 'install'
 
         # platforms for which to assemble a setup
         self.setup_platforms = [ 'local', 'x86', 'x64', 'win32' ]
         # paks to assemble in the setup
-        self.setup_packs = [ 'Q3Pack', 'UrTPack', 'ETPack', 'QLPack', 'Q2Pack', 'QuetooPack', 'JAPack', 'STVEFPack', 'WolfPack' ]
+        self.setup_packs = [
+                        'Q3Pack',
+                        'UrTPack',
+                        'ETPack',
+                        'QLPack',
+                        'Q2Pack',
+                        'QuetooPack',
+                        'JAPack',
+                        'STVEFPack',
+                        'WolfPack',
+                        'UnvanquishedPack',
+                        'Q1Pack',
+        ]
 
     def __repr__( self ):
         return 'config: target=%s config=%s' % ( self.target_selected, self.config_selected )
@@ -90,7 +106,7 @@ class Config:
                 VariantDir( build_dir, '.', duplicate = 0 )
                 shlib_objects_extra[libname] = SConscript( os.path.join( build_dir, 'SConscript.lib' ) )
 
-            for project in [ 'plugins/vfsqlpk3/vfsqlpk3.vcxproj',
+            for project in [
                      'plugins/vfspk3/vfspk3.vcxproj',
                      'plugins/vfspak/vfspak.vcxproj',
                      'plugins/vfswad/vfswad.vcxproj',
@@ -114,7 +130,7 @@ class Config:
                      'contrib/hydratoolz/hydratoolz.vcxproj',
                      'contrib/bobtoolz/bobtoolz.vcxproj',
                      'contrib/gtkgensurf/gtkgensurf.vcxproj',
-                     'contrib/bkgrnd2d/bkgrnd2d.vcxproj'
+                     'contrib/bkgrnd2d/bkgrnd2d.vcxproj',
                  ]:
                 ( libpath, libname ) = os.path.split( project )
                 libname = os.path.splitext( libname )[0]
@@ -258,10 +274,14 @@ class Config:
 
     def FetchGamePaks( self, path ):
         for pak in self.setup_packs:
-            svnurl = 'svn://svn.icculus.org/gtkradiant-gamepacks/%s/trunk' % pak
-            self.CheckoutOrUpdate( svnurl, os.path.join( path, 'installs', pak ) )
-        
-    def CopyTree( self, src, dst ):
+            pak_path = os.path.join( path, 'installs', pak )
+            if pak == 'UnvanquishedPack':
+                svnurl = 'https://github.com/Unvanquished/unvanquished-mapeditor-support.git/trunk/build/gtkradiant/'
+            else:
+                svnurl = 'svn://svn.icculus.org/gtkradiant-gamepacks/%s/trunk' % pak
+            self.CheckoutOrUpdate( svnurl, pak_path )
+
+    def CopyTree( self, src, dst):
         for root, dirs, files in os.walk( src ):
             target_dir = os.path.join( dst, root[root.find( '/' )+1:] )
             print ( target_dir )
@@ -278,7 +298,9 @@ class Config:
             pass
         else:
             # special case, fetch external paks under the local install directory
-            self.FetchGamePaks( self.install_directory )
+            env = Environment()
+            if not env.GetOption('clean') and not env.GetOption('no_packs'):
+                self.FetchGamePaks( self.install_directory )
         # NOTE: unrelated to self.setup_platforms - grab support files and binaries and install them
         if ( self.platform == 'Windows' ):
             backup_cwd = os.getcwd()
@@ -291,7 +313,7 @@ class Config:
                 ]:
                 if ( not os.path.exists( lib_archive ) ):
                     print( 'downloading %s' % lib_archive )
-                    archive_web_request = urllib2.urlopen( 'http://gtkradiant.s3-website-us-east-1.amazonaws.com/%s' % lib_archive )
+                    archive_web_request = urllib2.urlopen( 'http://s3.amazonaws.com/GtkRadiant/%s' % lib_archive )
                     archive_File = open( lib_archive, 'wb' )
                     while True:
                         data = archive_web_request.read( 1048576 ) # read 1mb at a time

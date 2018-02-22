@@ -43,7 +43,7 @@
 
 #include <stdio.h>
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 #include <dirent.h>
 #include <unistd.h>
 #else
@@ -133,6 +133,7 @@ static void vfsInitPakFile( const char *filename ){
 	for ( i = 0; i < gi.number_entry; i++ )
 	{
 		char filename_inzip[NAME_MAX];
+		char *filename_lower;
 		unz_file_info file_info;
 		VFS_PAKFILE* file;
 
@@ -145,9 +146,10 @@ static void vfsInitPakFile( const char *filename ){
 		g_pakFiles = g_slist_append( g_pakFiles, file );
 
 		vfsFixDOSName( filename_inzip );
-		g_strdown( filename_inzip );
+		//-1 null terminated string
+		filename_lower = g_ascii_strdown( filename_inzip, -1 );
 
-		file->name = strdup( filename_inzip );
+		file->name = strdup( filename_lower );
 		file->size = file_info.uncompressed_size;
 		file->zipfile = uf;
 		memcpy( &file->zipinfo, uf, sizeof( unz_s ) );
@@ -158,6 +160,7 @@ static void vfsInitPakFile( const char *filename ){
 				break;
 			}
 		}
+		g_free( filename_lower );
 	}
 }
 
@@ -196,7 +199,19 @@ void vfsInitDirectory( const char *path ){
 
 				{
 					char *ext = strrchr( dirlist, '.' );
-					if ( ( ext == NULL ) || ( Q_stricmp( ext, ".pk3" ) != 0 ) ) {
+
+					if ( ext != NULL && ( !Q_stricmp( ext, ".pk3dir" ) || !Q_stricmp( ext, ".dpkdir" ) ) ) {
+						if ( g_numDirs == VFS_MAXDIRS ) {
+							continue;
+						}
+						snprintf( g_strDirs[g_numDirs], PATH_MAX, "%s/%s", path, name );
+						g_strDirs[g_numDirs][PATH_MAX-1] = '\0';
+						vfsFixDOSName( g_strDirs[g_numDirs] );
+						vfsAddSlash( g_strDirs[g_numDirs] );
+						++g_numDirs;
+					}
+
+					if ( ext == NULL || ( Q_stricmp( ext, ".pk3" ) != 0 && Q_stricmp( ext, ".dpk" ) != 0 ) ) {
 						continue;
 					}
 				}
@@ -232,17 +247,18 @@ void vfsShutdown(){
 int vfsGetFileCount( const char *filename ){
 	int i, count = 0;
 	char fixed[NAME_MAX], tmp[NAME_MAX];
+	char *lower;
 	GSList *lst;
 
 	strcpy( fixed, filename );
 	vfsFixDOSName( fixed );
-	g_strdown( fixed );
+	lower = g_ascii_strdown( fixed, -1 );
 
 	for ( lst = g_pakFiles; lst != NULL; lst = g_slist_next( lst ) )
 	{
 		VFS_PAKFILE* file = (VFS_PAKFILE*)lst->data;
 
-		if ( strcmp( file->name, fixed ) == 0 ) {
+		if ( strcmp( file->name, lower ) == 0 ) {
 			count++;
 		}
 	}
@@ -250,12 +266,12 @@ int vfsGetFileCount( const char *filename ){
 	for ( i = 0; i < g_numDirs; i++ )
 	{
 		strcpy( tmp, g_strDirs[i] );
-		strcat( tmp, fixed );
+		strcat( tmp, lower );
 		if ( access( tmp, R_OK ) == 0 ) {
 			count++;
 		}
 	}
-
+	g_free( lower );
 	return count;
 }
 
@@ -263,6 +279,7 @@ int vfsGetFileCount( const char *filename ){
 int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 	int i, count = 0;
 	char tmp[NAME_MAX], fixed[NAME_MAX];
+	char *lower;
 	GSList *lst;
 
 	// filename is a full path
@@ -281,10 +298,14 @@ int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 
 		*bufferptr = safe_malloc( len + 1 );
 		if ( *bufferptr == NULL ) {
+			fclose( f );
 			return -1;
 		}
 
-		fread( *bufferptr, 1, len, f );
+		if ( fread( *bufferptr, 1, len, f ) != (size_t) len ) {
+			fclose( f );
+			return -1;
+		}
 		fclose( f );
 
 		// we need to end the buffer with a 0
@@ -296,7 +317,7 @@ int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 	*bufferptr = NULL;
 	strcpy( fixed, filename );
 	vfsFixDOSName( fixed );
-	g_strdown( fixed );
+	lower = g_ascii_strdown( fixed, -1 );
 
 	for ( i = 0; i < g_numDirs; i++ )
 	{
@@ -318,10 +339,14 @@ int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 
 				*bufferptr = safe_malloc( len + 1 );
 				if ( *bufferptr == NULL ) {
+					fclose( f );
 					return -1;
 				}
 
-				fread( *bufferptr, 1, len, f );
+				if ( fread( *bufferptr, 1, len, f ) != (size_t) len ) {
+					fclose( f );
+					return -1;
+				}
 				fclose( f );
 
 				// we need to end the buffer with a 0
@@ -338,7 +363,7 @@ int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 	{
 		VFS_PAKFILE* file = (VFS_PAKFILE*)lst->data;
 
-		if ( strcmp( file->name, fixed ) != 0 ) {
+		if ( strcmp( file->name, lower ) != 0 ) {
 			continue;
 		}
 
@@ -359,12 +384,13 @@ int vfsLoadFile( const char *filename, void **bufferptr, int index ){
 				return -1;
 			}
 			else{
+				g_free( lower );
 				return file->size;
 			}
 		}
 
 		count++;
 	}
-
+	g_free( lower );
 	return -1;
 }

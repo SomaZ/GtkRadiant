@@ -19,6 +19,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <stddef.h>
 
 #include "cmdlib.h"
 #include "mathlib.h"
@@ -66,7 +67,7 @@ winding_t   *AllocWinding( int points ){
 			c_peak_windings = c_active_windings;
 		}
 	}
-	s = sizeof( vec_t ) * 3 * points + sizeof( int );
+	s = sizeof( *w ) + points * sizeof( *w->p );
 	w = safe_malloc( s );
 	memset( w, 0, s );
 	return w;
@@ -94,7 +95,7 @@ winding_accu_t *AllocWindingAccu( int points ){
 			c_peak_windings = c_active_windings;
 		}
 	}
-	s = sizeof(*w) + (points > 4 ? sizeof(vec3_accu_t) * (points - 4) : 0);
+	s = sizeof( *w ) + points * sizeof( *w->p );
 	w = safe_malloc( s );
 	memset( w, 0, s );
 	return w;
@@ -459,7 +460,7 @@ winding_t *BaseWindingForPlane( vec3_t normal, vec_t dist ){
    ==================
  */
 winding_t   *CopyWinding( winding_t *w ){
-	int size;
+	size_t size;
 	winding_t   *c;
 
 	if ( !w ) {
@@ -467,7 +468,7 @@ winding_t   *CopyWinding( winding_t *w ){
 	}
 
 	c = AllocWinding( w->numpoints );
-	size = (int)( (size_t)( (winding_t *)0 )->p[w->numpoints] );
+	size = sizeof( *w ) + sizeof( *w->p ) * w->numpoints;
 	memcpy( c, w, size );
 	return c;
 }

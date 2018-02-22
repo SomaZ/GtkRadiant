@@ -32,12 +32,7 @@
    - Make sure the interface is not dependent on gtk.
  */
 
-#ifdef _WIN32
-//#include <gdk/win32/gdkwin32.h>
-#include <gdk/gdkwin32.h>
-#endif
-#if defined ( __linux__ ) || defined ( __APPLE__ )
-#include <gdk/gdkx.h>
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 #include <dirent.h>
 #endif
 #include <gtk/gtk.h>
@@ -474,7 +469,7 @@ void DumpUnreferencedShaders(){
    ==================
  */
 void BuildShaderList(){
-	int count;
+	int count, i;
 	char filename[1024];
 	char *pBuff;
 	char dirstring[NAME_MAX];
@@ -491,43 +486,170 @@ void BuildShaderList(){
 			Sys_FPrintf( SYS_ERR, "Couldn't find '%s'\n", g_pGameDescription->mShaderlist.GetBuffer() );
 			return;
 		}
-		// NOTE TTimo we use vfsGetFullPath solely to get the full path of the shader list we are gonna load
-		//   but we actually send the relative path to vfsLoadFile
-		//   so let's hope there is no disparity between the two functions
-		if ( !vfsGetFullPath( filename, 0, 0 ) ) {
-			Sys_FPrintf( SYS_ERR, "Couldn't find full path for '%s'\n", g_pGameDescription->mShaderlist.GetBuffer() );
-			return;
-		}
-		Sys_Printf( "Parsing shader files from %s\n", vfsGetFullPath( filename, 0, 0 ) );
-		nLen = vfsLoadFile( filename, reinterpret_cast<void**>( &pBuff ), 0 );
-		if ( nLen > 0 ) {
-			StartTokenParsing( pBuff );
-			nLen = 0;
-			while ( GetToken( true ) )
-			{
-				GSList *tmp;
-				bool found = false;
 
-				// each token should be a shader filename
-				sprintf( dirstring, "%s.shader", token );
-
-				for ( tmp = l_shaderfiles; tmp != NULL; tmp = tmp->next )
+		for ( i = 0; i < count; i++ )
+		{
+			// NOTE TTimo we use vfsGetFullPath solely to get the full path of the shader list we are gonna load
+			//   but we actually send the relative path to vfsLoadFile
+			//   so let's hope there is no disparity between the two functions
+			if ( !vfsGetFullPath( filename, i, 0 ) ) {
+				Sys_FPrintf( SYS_ERR, "Couldn't find full path for '%s'\n", g_pGameDescription->mShaderlist.GetBuffer() );
+				return;
+			}
+			Sys_Printf( "Parsing shader files from %s\n", vfsGetFullPath( filename, i, 0 ) );
+			nLen = vfsLoadFile( filename, reinterpret_cast<void**>( &pBuff ), i );
+			if ( nLen > 0 ) {
+				StartTokenParsing( pBuff );
+				nLen = 0;
+				while ( GetToken( true ) )
 				{
-					if ( !strcmp( dirstring, (char*)tmp->data ) ) {
-						found = true;
-						Sys_FPrintf( SYS_WRN, "duplicate entry \"%s\" in shaderlist.txt\n", (char*)tmp->data );
-						break;
+					GSList *tmp;
+					bool found = false;
+
+					// each token should be a shader filename
+					sprintf( dirstring, "%s.shader", token );
+
+					for ( tmp = l_shaderfiles; tmp != NULL; tmp = tmp->next )
+					{
+						if ( !strcmp( dirstring, (char*)tmp->data ) ) {
+							found = true;
+							Sys_FPrintf( SYS_WRN, "duplicate entry \"%s\" in shaderlist.txt\n", (char*)tmp->data );
+							break;
+						}
+					}
+
+					if ( !found ) {
+						l_shaderfiles = g_slist_append( l_shaderfiles, strdup( dirstring ) );
+						nLen++;
 					}
 				}
-
-				if ( !found ) {
-					l_shaderfiles = g_slist_append( l_shaderfiles, strdup( dirstring ) );
-					nLen++;
-				}
+				g_free( pBuff );
 			}
-			g_free( pBuff );
 		}
 	}
+}
+
+bool IsValidTextureName(char* name){
+	CString strTemp;
+
+	StripExtension( name );
+	strTemp = name;
+	strTemp.MakeLower();
+
+	// avoid effect textures for Q3 texture sets
+	if ( strTemp.Find( ".specular" ) >= 0 ||
+		strTemp.Find( ".glow" ) >= 0 ||
+		strTemp.Find( ".bump" ) >= 0 ||
+		strTemp.Find( ".diffuse" ) >= 0 ||
+		strTemp.Find( ".blend" ) >= 0 ||
+		strTemp.Find( ".alpha" ) >= 0 ) {
+		return false;
+	}
+
+	if ( g_str_has_suffix( name, "_g" ) ||
+			// avoid glow, heightmap, normalmap and specular maps for Q4 texture sets
+			g_str_has_suffix( name, "_h" ) ||
+			g_str_has_suffix( name, "_local" ) ||
+			g_str_has_suffix( name, "_nm" ) ||
+			g_str_has_suffix( name, "_s" ) ||
+			g_str_has_suffix( name, "_bump" ) ||
+			g_str_has_suffix( name, "_gloss" ) ||
+			g_str_has_suffix( name, "_luma" ) ||
+			g_str_has_suffix( name, "_norm" ) ||
+			// more well-known suffixes
+			g_str_has_suffix( name, "_p" ) || // preview (used by qer_editorimage)
+			g_str_has_suffix( name, "_g" ) || // gloss
+			g_str_has_suffix( name, "_n" )    // normal
+			) {
+		return false;
+	}
+
+	// avoid ever loading a texture name with spaces
+	if ( strTemp.Find( " " ) >= 0 ) {
+		Sys_FPrintf( SYS_WRN, "WARNING: Skipping texture name with spaces [%s]\n", strTemp.GetBuffer() );
+		return false;
+	}
+
+	return true;
+}
+
+bool IsDirContainingTextures(const char* path){
+	char name[1024];
+	char dirstring[1024];
+	GSList *files = NULL, *temp;
+
+	sprintf( dirstring, "textures/%s", path );
+	g_ImageManager.BeginExtensionsScan();
+	const char* ext;
+	while ( ( ext = g_ImageManager.GetNextExtension() ) != NULL )
+	{
+		files = g_slist_concat( files, vfsGetFileList( dirstring, ext ) );
+	}
+
+	for ( temp = files; temp; temp = temp->next )
+	{
+		sprintf( name, "%s", (char*)temp->data );
+
+		if ( IsValidTextureName( name ) ) {
+			vfsClearFileDirList( &files );
+			return true;
+		}
+	}
+
+	vfsClearFileDirList( &files );
+	return false;
+}
+
+void Texture_ListDirectory(){
+	char name[1024];
+	char dirstring[1024];
+	int shaders_count = 0;
+	int textures_count = 0;
+	GSList *files = NULL, *temp;
+
+	// load texture_directory.shader
+	// NOTE: because of above call to Texture_ClearInuse, g_ActiveShaders will have the newly loaded shaders only
+	// we'll use that later to check if textures have a shader associated or not
+	// NOTE: all shaders loaded through QERApp_LoadShadersFromDir will get their InUse flag to True, we'll need a call to Texture_ShowInUse for later cleanup/adjustment
+	// NOTE: QERApp_LoadShadersFromDir has two criterions for loading a shader:
+	//   the shaderfile is texture_directory (like "museum" will load everything in museum.shader)
+	//   the shader name contains texture_directory (like "base_floor" will load museum.shader::base_floor/concfloor_rain)
+	shaders_count = QERApp_LoadShadersFromDir( texture_directory );
+	// load remaining texture files
+	// if a texture is already in use to represent a shader, ignore it
+
+	// need this function "GSList *lst SynapseServer::GetMinorList(char *major_name);"
+
+	sprintf( dirstring, "textures/%s", texture_directory );
+	g_ImageManager.BeginExtensionsScan();
+	const char* ext;
+	while ( ( ext = g_ImageManager.GetNextExtension() ) != NULL )
+	{
+		files = g_slist_concat( files, vfsGetFileList( dirstring, ext ) );
+	}
+
+	for ( temp = files; temp; temp = temp->next )
+	{
+		sprintf( name, "%s%s", texture_directory, (char*)temp->data );
+
+		if ( !IsValidTextureName( name ) ) {
+			continue;
+		}
+
+		// build a texture name that fits the conventions for qtexture_t::name
+		char stdName[1024];
+		sprintf( stdName, "textures/%s", name );
+		// check if this texture doesn't have a shader
+		if ( !QERApp_ActiveShader_ForTextureName( stdName ) ) {
+			QERApp_CreateShader_ForTextureName( stdName );
+			textures_count++;
+		}
+	}
+
+	Sys_Printf( "Loaded %d shaders and created default shader for %d orphan textures.\n",
+				shaders_count, textures_count );
+
+	vfsClearFileDirList( &files );
 }
 
 /*
@@ -540,40 +662,20 @@ void ClearGSList( GSList* lst ){
 	GSList *p = lst;
 	while ( p )
 	{
-		free( p->data );
+		g_free( p->data );
 		p = g_slist_remove( p, p->data );
 	}
 }
 
-void FillTextureMenu( GSList** pArray ){
-	GtkWidget *menu, *sep, *item; // point to the Textures GtkMenu and to the last separator
-	GList *children, *seplst, *lst;
-	GSList *texdirs = NULL;
-	GSList *texdirs_tmp = NULL;
+void FillTextureList( GSList** pArray )
+{
 	GSList *p;
 	char dirRoot[NAME_MAX];
+	int texture_num;
+	GSList *texdirs = NULL;
+	GSList *texdirs_tmp = NULL;
 
-	// delete everything
-	menu = GTK_WIDGET( g_object_get_data( G_OBJECT( g_qeglobals_gui.d_main_window ), "menu_textures" ) );
-	sep = GTK_WIDGET( g_object_get_data( G_OBJECT( g_qeglobals_gui.d_main_window ), "menu_textures_separator" ) );
-	children = gtk_container_get_children( GTK_CONTAINER( menu ) );
-	if( children ) {
-		seplst = g_list_find( children, sep );
-		if( seplst ) {
-			for ( lst = g_list_next( seplst ); lst != NULL; lst = g_list_next( lst ) )
-			{
-				gtk_widget_destroy( GTK_WIDGET( lst->data ) );
-			}
-		}
-		g_list_free( children );
-	}
-
-	texture_nummenus = 0;
-
-	// add everything
-	if ( !g_qeglobals.d_project_entity ) {
-		return;
-	}
+	texture_num = 0;
 
 	// scan texture dirs and pak files only if not restricting to shaderlist
 	if ( !g_PrefsDlg.m_bTexturesShaderlistOnly ) {
@@ -583,7 +685,14 @@ void FillTextureMenu( GSList** pArray ){
 			// Hydra: erm, this didn't used to do anything except leak memory...
 			// For Halflife support this is required to work however.
 			// g_slist_append(texdirs, p->data);
-			texdirs = g_slist_append( texdirs, strdup( (char *)p->data ) );
+			if ( !g_PrefsDlg.m_bHideEmptyDirs || IsDirContainingTextures( (char*)p->data ) )
+			{
+				texdirs = g_slist_append( texdirs, g_strdup( (char *)p->data ) );
+			}
+			else
+			{
+				Sys_Printf( "Hiding empty texture dir: %s\n", g_strdup( (char *)p->data ) );
+			}
 		}
 		vfsClearFileDirList( &texdirs_tmp );
 	}
@@ -595,20 +704,37 @@ void FillTextureMenu( GSList** pArray ){
 	while ( l_shaderfiles != NULL )
 	{
 		char shaderfile[PATH_MAX];
+		char *colon;
 		gboolean found = FALSE;
 
 		ExtractFileName( (char*)l_shaderfiles->data, shaderfile );
 		StripExtension( shaderfile );
 		strlwr( shaderfile );
 
+		//support for shaderlist.txt tags, forward
+		colon = strstr( (char*)l_shaderfiles->data, ":" );
+		if( colon )
+		{
+			strncat( shaderfile, colon, sizeof( shaderfile ) - strlen( shaderfile ) - 1 );
+		}
+
 		for ( GSList *tmp = texdirs; tmp; tmp = g_slist_next( tmp ) )
+		{
 			if ( !strcasecmp( (char*)tmp->data, shaderfile ) ) {
 				found = TRUE;
 				break;
 			}
+		}
 
 		if ( !found ) {
-			texdirs = g_slist_prepend( texdirs, strdup( shaderfile ) );
+			if( !g_PrefsDlg.m_bHideEmptyDirs || QERApp_IsDirContainingShaders( shaderfile ) )
+			{
+				texdirs = g_slist_prepend( texdirs, g_strdup( shaderfile ) );
+			}
+			else
+			{
+				Sys_Printf( "Hiding empty shader dir: %s\n", g_strdup ( shaderfile ) );
+			}
 		}
 
 		free( l_shaderfiles->data );
@@ -617,6 +743,69 @@ void FillTextureMenu( GSList** pArray ){
 
 	// sort the list
 	texdirs = g_slist_sort( texdirs, (GCompareFunc)strcmp );
+
+	GSList *temp = texdirs;
+	while ( temp )
+	{
+		char* ptr = strchr( (char*)temp->data, '_' );
+
+		// do we shrink the menus?
+		if ( ptr != NULL ) {
+			// extract the root
+			strcpy( dirRoot, (char*)temp->data );
+			dirRoot[ptr - (char*)temp->data + 1] = 0;
+
+			// we shrink only if we have at least two things to shrink :-)
+			if ( temp->next && ( strstr( (char*)temp->next->data, dirRoot ) == (char*)temp->next->data ) ) {
+				do
+				{
+					if ( pArray ) {
+						*pArray = g_slist_append( *pArray, g_strdup( (char*)temp->data ) );
+					}
+					if ( ++texture_num == MAX_TEXTUREDIRS ) {
+						Sys_FPrintf( SYS_WRN, "WARNING: max texture directories count has been reached!\n" );
+						ClearGSList( texdirs );
+						return;
+					}
+					temp = temp->next;
+				}
+				while ( temp && ( strstr( (char*)temp->data, dirRoot ) == temp->data ) );
+
+				ptr = strchr( dirRoot, '_' );
+				*ptr = 0;
+				continue;
+			}
+		}
+		if ( pArray ) {
+			*pArray = g_slist_append( *pArray, g_strdup( (char*)temp->data ) );
+		}
+		if ( ++texture_num == MAX_TEXTUREDIRS ) {
+			Sys_FPrintf( SYS_WRN, "WARNING: max texture directories count has been reached!\n" );
+			ClearGSList( texdirs );
+			return;
+		}
+
+		temp = temp->next;
+	}
+	ClearGSList( texdirs );
+}
+
+void FillTextureMenu( GSList *texdirs )
+{
+	GtkWidget *menu, *item;
+	GList *children, *lst;
+	char dirRoot[NAME_MAX];
+
+	// delete everything
+	menu = GTK_WIDGET( g_object_get_data( G_OBJECT( g_qeglobals_gui.d_main_window ), "menu_texture_dirs" ) );
+	children = gtk_container_get_children( GTK_CONTAINER( menu ) );
+	if( children ) {
+		for ( lst = g_list_first( children ); lst != NULL; lst = g_list_next( lst ) )
+		{
+			gtk_widget_destroy( GTK_WIDGET( lst->data ) );
+		}
+		g_list_free( children );
+	}
 
 	GSList *temp = texdirs;
 	while ( temp )
@@ -645,9 +834,7 @@ void FillTextureMenu( GSList** pArray ){
 
 					strcpy( texture_menunames[texture_nummenus], (char*)temp->data );
 					strcat( texture_menunames[texture_nummenus], "/" );
-					if ( pArray ) {
-						*pArray = g_slist_append( *pArray, strdup( (char*)temp->data ) );
-					}
+
 					if ( ++texture_nummenus == MAX_TEXTUREDIRS ) {
 						Sys_FPrintf( SYS_WRN, "WARNING: max texture directories count has been reached!\n" );
 						// push submenu and get out
@@ -682,9 +869,7 @@ void FillTextureMenu( GSList** pArray ){
 
 		strcpy( texture_menunames[texture_nummenus], (char*)temp->data );
 		strcat( texture_menunames[texture_nummenus], "/" );
-		if ( pArray ) {
-			*pArray = g_slist_append( *pArray, strdup( (char*)temp->data ) );
-		}
+
 		if ( ++texture_nummenus == MAX_TEXTUREDIRS ) {
 			Sys_FPrintf( SYS_WRN, "WARNING: max texture directories count has been reached!\n" );
 			ClearGSList( texdirs );
@@ -693,7 +878,36 @@ void FillTextureMenu( GSList** pArray ){
 
 		temp = temp->next;
 	}
-	ClearGSList( texdirs );
+}
+
+void FillTextureDirListWidget( GSList *texdirs )
+{
+	GtkWidget* treeview;
+	GtkTreeModel* model;
+	GtkListStore* store;
+	GtkTreeIter iter;
+	GSList *dir;
+
+	treeview = GTK_WIDGET( g_object_get_data( G_OBJECT( g_qeglobals_gui.d_main_window ), "dirlist_treeview" ) );
+	if( treeview == NULL ) {
+		return;
+	}
+	model = gtk_tree_view_get_model( GTK_TREE_VIEW( treeview ) );
+	store = GTK_LIST_STORE( model );
+
+	gtk_list_store_clear( store );
+
+	for( dir = texdirs; dir != NULL; dir = g_slist_next( dir ) )
+	{
+		gtk_list_store_append( store, &iter );
+		gtk_list_store_set( store, &iter, 0, (gchar*)dir->data, -1 );
+	}
+}
+
+void Texture_ShowDirectory_by_path( const char* pPath )
+{
+	snprintf( texture_directory, sizeof( texture_directory ), "%s%s", pPath, "/" );
+	Texture_ShowDirectory();
 }
 
 /*
@@ -713,13 +927,9 @@ void FillTextureMenu( GSList** pArray ){
    ( the GL textures are not flushed though)
    ==============
  */
+
 void Texture_ShowDirectory(){
 	char name[1024];
-	char dirstring[1024];
-	CString strTemp;
-	int shaders_count = 0;
-	int textures_count = 0;
-	GSList *files = NULL, *temp;
 
 	g_bScreenUpdates = false;
 
@@ -730,78 +940,8 @@ void Texture_ShowDirectory(){
 	// NOTE: shaders that are not in use but have been loaded previously are still in memory. But they don't get displayed.
 
 	g_qeglobals.d_texturewin.originy = 0;
-	// load texture_directory.shader
-	// NOTE: because of above call to Texture_ClearInuse, g_ActiveShaders will have the newly loaded shaders only
-	// we'll use that later to check if textures have a shader associated or not
-	// NOTE: all shaders loaded through QERApp_LoadShadersFromDir will get their InUse flag to True, we'll need a call to Texture_ShowInUse for later cleanup/adjustment
-	// NOTE: QERApp_LoadShadersFromDir has two criterions for loading a shader:
-	//   the shaderfile is texture_directory (like "museum" will load everything in museum.shader)
-	//   the shader name contains texture_directory (like "base_floor" will load museum.shader::base_floor/concfloor_rain)
-	shaders_count = QERApp_LoadShadersFromDir( texture_directory );
-	// load remaining texture files
-	// if a texture is already in use to represent a shader, ignore it
 
-	// need this function "GSList *lst SynapseServer::GetMinorList(char *major_name);"
-
-	sprintf( dirstring, "textures/%s", texture_directory );
-	g_ImageManager.BeginExtensionsScan();
-	const char* ext;
-	while ( ( ext = g_ImageManager.GetNextExtension() ) != NULL )
-	{
-		files = g_slist_concat( files, vfsGetFileList( dirstring, ext ) );
-	}
-
-	for ( temp = files; temp; temp = temp->next )
-	{
-		sprintf( name, "%s%s", texture_directory, (char*)temp->data );
-
-		StripExtension( name );
-		strTemp = name;
-		strTemp.MakeLower();
-
-		// avoid effect textures for Q3 texture sets
-		if ( strTemp.Find( ".specular" ) >= 0 ||
-			 strTemp.Find( ".glow" ) >= 0 ||
-			 strTemp.Find( ".bump" ) >= 0 ||
-			 strTemp.Find( ".diffuse" ) >= 0 ||
-			 strTemp.Find( ".blend" ) >= 0 ||
-			 strTemp.Find( ".alpha" ) >= 0 ) {
-			continue;
-		}
-
-		// avoid glow, heightmap, normalmap and specular maps for Q4 texture sets
-		if ( g_str_has_suffix( name, "_g" ) ||
-				g_str_has_suffix( name, "_h" ) ||
-				g_str_has_suffix( name, "_local" ) ||
-				g_str_has_suffix( name, "_nm" ) ||
-				g_str_has_suffix( name, "_s" ) ||
-				g_str_has_suffix( name, "_bump" ) ||
-				g_str_has_suffix( name, "_gloss" ) ||
-				g_str_has_suffix( name, "_luma" ) ||
-				g_str_has_suffix( name, "_norm" ) ) {
-			continue;
-		}
-
-		// avoid ever loading a texture name with spaces
-		if ( strTemp.Find( " " ) >= 0 ) {
-			Sys_FPrintf( SYS_WRN, "WARNING: Skipping texture name with spaces [%s]\n", strTemp.GetBuffer() );
-			continue;
-		}
-
-		// build a texture name that fits the conventions for qtexture_t::name
-		char stdName[1024];
-		sprintf( stdName, "textures/%s", name );
-		// check if this texture doesn't have a shader
-		if ( !QERApp_ActiveShader_ForTextureName( stdName ) ) {
-			QERApp_CreateShader_ForTextureName( stdName );
-			textures_count++;
-		}
-	}
-
-	Sys_Printf( "Loaded %d shaders and created default shader for %d orphan textures.\n",
-				shaders_count, textures_count );
-
-	vfsClearFileDirList( &files );
+	Texture_ListDirectory();
 
 	// sort for displaying
 	QERApp_SortActiveShaders();
@@ -833,6 +973,30 @@ void Texture_ShowDirectory( int menunum ){
 	Texture_ShowDirectory();
 }
 
+void Texture_GetSize( qtexture_t *tex, int & nWidth, int & nHeight ){
+	if( !tex ) 
+		return;
+
+	if( g_PrefsDlg.m_bFixedTextureSize && g_PrefsDlg.m_nFixedTextureSizeWidth > 0 && g_PrefsDlg.m_nFixedTextureSizeHeight > 0 )
+	{
+		nWidth = g_PrefsDlg.m_nFixedTextureSizeWidth;
+		nHeight = g_PrefsDlg.m_nFixedTextureSizeHeight;
+		float ratioWidth = nHeight / nWidth;
+		float ratioHeight = nWidth / nHeight;
+		if( tex->width * ratioWidth > tex->height * ratioHeight )
+		{
+			nHeight *= tex->height * 1.0f / tex->width * ratioWidth;
+		} else 
+		if( tex->height * ratioHeight > tex->width * ratioWidth )
+		{
+			nWidth *= tex->width * 1.0f / tex->height * ratioHeight;
+		}
+	} else {
+		nWidth = (int)( tex->width * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+		nHeight = (int)( tex->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+	}
+}
+
 // scroll origin so the current texture is completely on screen
 // if current texture is not displayed, nothing is changed
 void Texture_ResetPosition(){
@@ -858,7 +1022,9 @@ void Texture_ResetPosition(){
 			break;
 		}
 
-		int nHeight = (int)( q->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+		int nHeight;
+		int nWidth;
+		Texture_GetSize( q, nWidth, nHeight );
 		// we have found when texdef->name and the shader name match
 		// NOTE: as everywhere else for our comparisons, we are not case sensitive
 		if ( !strcmpi( g_qeglobals.d_texturewin.texdef.GetName(), pCurrentShader->getName() ) ) {
@@ -991,7 +1157,7 @@ void Texture_ShowStartupShaders(){
 	}
 
 	if ( g_PrefsDlg.m_nShader == PrefsDlg::SHADER_ALL ) {
-		int count;
+		int count, i;
 		char filename[1024];
 		char   *pBuff;
 		char dirstring[NAME_MAX];
@@ -1010,36 +1176,39 @@ void Texture_ShowStartupShaders(){
 			return;
 		}
 
-		Sys_Printf( "Parsing shader files from %s\n", vfsGetFullPath( filename, 0, 0 ) );
-		nLen = vfsLoadFile( filename, reinterpret_cast<void**>( &pBuff ), 0 );
-		if ( nLen > 0 ) {
-			StartTokenParsing( pBuff );
-			nLen = 0;
-			while ( GetToken( true ) )
-			{
-				GSList *tmp;
-				bool found = false;
-
-				// each token should be a shader filename
-				sprintf( dirstring, "%s.shader", token );
-
-				for ( tmp = shaderfiles; tmp != NULL; tmp = tmp->next )
+		for ( i = 0; i < count; i++ )
+		{
+			Sys_Printf( "Parsing shader files from %s\n", vfsGetFullPath( filename, i, 0 ) );
+			nLen = vfsLoadFile( filename, reinterpret_cast<void**>( &pBuff ), i );
+			if ( nLen > 0 ) {
+				StartTokenParsing( pBuff );
+				nLen = 0;
+				while ( GetToken( true ) )
 				{
-					if ( !strcmp( dirstring, (char*)tmp->data ) ) {
-						found = true;
-						Sys_FPrintf( SYS_WRN, "duplicate entry \"%s\" in shaderlist.txt\n", (char*)tmp->data );
-						break;
+					GSList *tmp;
+					bool found = false;
+
+					// each token should be a shader filename
+					sprintf( dirstring, "%s.shader", token );
+
+					for ( tmp = shaderfiles; tmp != NULL; tmp = tmp->next )
+					{
+						if ( !strcmp( dirstring, (char*)tmp->data ) ) {
+							found = true;
+							Sys_FPrintf( SYS_WRN, "duplicate entry \"%s\" in shaderlist.txt\n", (char*)tmp->data );
+							break;
+						}
+					}
+
+					if ( !found ) {
+						shaderfiles = g_slist_append( l_shaderfiles, strdup( dirstring ) );
+						strcpy( texture_directory, dirstring );
+						Texture_ShowDirectory();
+						nLen++;
 					}
 				}
-
-				if ( !found ) {
-					shaderfiles = g_slist_append( l_shaderfiles, strdup( dirstring ) );
-					strcpy( texture_directory, dirstring );
-					Texture_ShowDirectory();
-					nLen++;
-				}
+				g_free( pBuff );
 			}
-			g_free( pBuff );
 		}
 	}
 }
@@ -1057,6 +1226,20 @@ void Texture_ShowStartupShaders(){
    otherwise we may need to rely on a list instead of an array storage
    ============================================================================
  */
+
+void Texture_GetPosSize( qtexture_t *tex, int & nWidth, int & nHeight ){
+	if( !tex ) 
+		return;
+
+	if( g_PrefsDlg.m_bFixedTextureSize && g_PrefsDlg.m_nFixedTextureSizeWidth > 0 && g_PrefsDlg.m_nFixedTextureSizeHeight > 0 )
+	{
+		nWidth = g_PrefsDlg.m_nFixedTextureSizeWidth;
+		nHeight = g_PrefsDlg.m_nFixedTextureSizeHeight;
+	} else {
+		nWidth = (int)( tex->width * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+		nHeight = (int)( tex->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+	}
+}
 
 void Texture_StartPos( void ){
 	//++timo TODO: check use of current_texture and current_row?
@@ -1124,8 +1307,9 @@ IShader* Texture_NextPos( int *x, int *y ){
 		continue;
 	}
 
-	int nWidth = (int)( q->width * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
-	int nHeight = (int)( q->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+	int nWidth;
+	int nHeight;
+	Texture_GetPosSize( q, nWidth, nHeight );
 	if ( current_x + nWidth > g_qeglobals.d_texturewin.width - 8 && current_row ) { // go to the next row unless the texture is the first on the row
 		current_x = 8;
 		current_y -= current_row + FONT_HEIGHT + 4;
@@ -1192,7 +1376,7 @@ void WINAPI Texture_SetTexture( texdef_t *texdef, brushprimit_texdef_t *brushpri
 
 	g_dlgFind.updateTextures( texdef->GetName() );
 	if ( !g_dlgFind.isOpen() && bSetSelection ) {
-		Select_SetTexture( texdef,brushprimit_texdef,bFitScale );
+		Select_SetTexture( texdef,brushprimit_texdef, bFitScale );
 	}
 
 	//plugins: send a message telling that the selected texture may have changed
@@ -1277,8 +1461,9 @@ void SelectTexture( int mx, int my, bool bShift, bool bFitScale ){
 		if ( !q ) {
 			break;
 		}
-		int nWidth = (int)( q->width * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
-		int nHeight = (int)( q->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+		int nWidth;
+		int nHeight;
+		Texture_GetPosSize( q, nWidth, nHeight );
 		if ( mx > x && mx - x < nWidth
 			 && my < y && y - my < nHeight + FONT_HEIGHT ) {
 			if ( bShift ) {
@@ -1448,8 +1633,7 @@ void Texture_Draw( int width, int height ){
 			break;
 		}
 
-		nWidth = (int)( q->width * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
-		nHeight = (int)( q->height * ( (float)g_PrefsDlg.m_nTextureScale / 100 ) );
+		Texture_GetSize( q, nWidth, nHeight );
 
 		if ( y != last_y ) {
 			last_y = y;

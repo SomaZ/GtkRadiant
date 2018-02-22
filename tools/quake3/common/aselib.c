@@ -19,7 +19,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
 #include "aselib.h"
 #include "inout.h"
 
@@ -114,7 +113,7 @@ static char gl_filename[1024];
 static void ASE_Process( void );
 static void ASE_FreeGeomObject( int ndx );
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 
 static char* strlwr( char* string ){
 	char *cp;

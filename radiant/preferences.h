@@ -217,6 +217,7 @@ void Dump();
 #define STVEF_GAME "stvef.game"
 #define WOLF_GAME "wolf.game"
 #define Q1_GAME "q1.game"
+#define UNVANQUISHED_GAME "unvanquished.game"
 
 #define Q3_PACK "Q3Pack"
 #define URT_PACK "UrTPack"
@@ -233,6 +234,7 @@ void Dump();
 #define STVEF_PACK "STVEFPack"
 #define WOLF_PACK "WolfPack"
 #define Q1_PACK "Q1Pack"
+#define UNVANQUISHED_PACK "UnvanquishedPack"
 
 class CGameInstall : public Dialog {
 public:
@@ -262,6 +264,7 @@ public:
 	GAME_STVEF,
 	GAME_WOLF,
 	GAME_Q1,
+	GAME_UNVANQUISHED,
 	GAME_COUNT
   };
 
@@ -275,7 +278,6 @@ protected:
   // maps from m_nComboSelect to the games
   int m_availGames[GAME_COUNT];
 
-  GtkWidget * m_executablesVBox;
 };
 
 /*!
@@ -470,6 +472,8 @@ typedef struct {
 	int nCamHeight;
 	int nZFloatWidth;
 	int nState;
+	int nTextureDirectoryListWidth;
+
 } windowPosInfo_t;
 
 class PrefsDlg : public Dialog
@@ -635,6 +639,7 @@ bool m_bTextureScrollbar;
 bool m_bDisplayLists;
 bool m_bAntialiasedPointsAndLines;    // Fishman - Add antialiazed points and lines support. 09/03/00
 bool m_bShowShaders;
+bool m_bHideEmptyDirs;
 int m_nShader;
 bool m_bNoStipple;
 int m_nUndoLevels;
@@ -649,6 +654,9 @@ int m_nCubicScale;
 bool m_bSelectCurves;
 bool m_bSelectModels;
 int m_nEntityShowState;
+bool m_bFixedTextureSize;
+int m_nFixedTextureSizeWidth;
+int m_nFixedTextureSizeHeight;
 int m_nTextureScale;
 bool m_bNormalizeColors;
 bool m_bSwitchClip;
@@ -681,6 +689,7 @@ bool m_bRunQuake;
 bool m_bDoSleep;
 
 bool m_bClipCaulk;
+bool m_bMakeHollowCaulk;
 
 // make the texture increments match the grid changes
 bool m_bSnapTToGrid;
@@ -726,6 +735,8 @@ int m_nLatchedTextureQuality;
 // RIANT
 // texture compression format
 int m_nTextureCompressionFormat;
+
+bool m_bShowTexDirList;
 
 int m_nLightRadiuses;
 

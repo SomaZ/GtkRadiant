@@ -216,6 +216,7 @@ struct SKeyInfo
 #define ID_VIEW_HIDESHOW_SHOWHIDDEN     33007
 #define ID_TEXTURES_SHADERS_SHOW        33008
 //#define ID_SELECTION_CSGADD             33009
+#define ID_TEXTURES_EMPTYDIRS_HIDE      33010
 #define ID_SELECTION_CSGMERGE           33011
 #define ID_TEXTURES_FLUSH_UNUSED        33014
 #define ID_DROP_GROUP_REMOVE            33016
@@ -489,7 +490,7 @@ void create_main_toolbar( GtkWidget *window, GtkWidget *vbox );
 void create_plugin_toolbar( GtkWidget *window, GtkWidget *vbox );
 void create_main_statusbar( GtkWidget *window, GtkWidget *vbox );
 GtkWidget *m_pStatusLabel[6];
-GtkWidget *m_pSplits[4];
+GtkWidget *m_pSplits[5];
 XYWnd* m_pXYWnd;
 XYWnd* m_pYZWnd;
 XYWnd* m_pXZWnd;
@@ -863,6 +864,7 @@ void OnViewCrosshair();
 void OnViewHideshowHideselected();
 void OnViewHideshowShowhidden();
 void OnTexturesShadersShow();
+void OnTexturesEmptyDirsHide();
 void OnViewGroups();
 void OnDropGroupAddtoWorld();
 void OnDropGroupName();

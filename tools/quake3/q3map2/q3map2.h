@@ -40,24 +40,13 @@
 
 
 /* -------------------------------------------------------------------------------
-   
-   QuakeLive stuff from unzip.c (q3-common)
-   
-   ------------------------------------------------------------------------------- */
-// used to tell unzip.c that you are opening ql pk3's   1 = quakelive  0 = everything else
-// **NOTE** - should be set as early as possible e.g before the first call to VFSInitDirectory()
-extern int unz_GAME_QL;
-
-
-
-/* -------------------------------------------------------------------------------
 
    dependencies
 
    ------------------------------------------------------------------------------- */
 
 /* platform-specific */
-#if defined( __linux__ ) || defined( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 	#define Q_UNIX
 #endif
 
@@ -91,6 +80,7 @@ extern int unz_GAME_QL;
 #include "vfs.h"
 #include "png.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -541,7 +531,7 @@ typedef struct {
    ------------------------------------------------------------------------------- */
 
 /* ydnar: for smaller structs */
-typedef char qb_t;
+typedef unsigned char qb_t;
 
 
 /* ydnar: for q3map_tcMod */
@@ -892,7 +882,7 @@ typedef struct brush_s
 	vec3_t mins, maxs;
 	int numsides;
 
-	side_t sides[ 6 ];                      /* variably sized */
+	side_t sides[];                         /* variably sized */
 }
 brush_t;
 
@@ -1628,7 +1618,7 @@ tree_t                      *FaceBSP( face_t *list );
 
 /* model.c */
 void                        PicoPrintFunc( int level, const char *str );
-void                        PicoLoadFileFunc( char *name, byte **buffer, int *bufSize );
+void                        PicoLoadFileFunc( const char *name, byte **buffer, int *bufSize );
 picoModel_t                 *FindModel( char *name, int frame );
 picoModel_t                 *LoadModel( char *name, int frame );
 void                        InsertModel( char *name, int frame, m4x4_t transform, remap_t *remap, shaderInfo_t *celShader, int eNum, int castShadows, int recvShadows, int spawnFlags, float lightmapScale );
@@ -1651,7 +1641,7 @@ void                        ClearSurface( mapDrawSurface_t *ds );
 void                        AddEntitySurfaceModels( entity_t *e );
 mapDrawSurface_t            *DrawSurfaceForSide( entity_t *e, brush_t *b, side_t *s, winding_t *w );
 mapDrawSurface_t            *DrawSurfaceForMesh( entity_t *e, parseMesh_t *p, mesh_t *mesh );
-mapDrawSurface_t            *DrawSurfaceForFlare( int entNum, vec3_t origin, vec3_t normal, vec3_t color, char *flareShader, int lightStyle );
+mapDrawSurface_t            *DrawSurfaceForFlare( int entNum, vec3_t origin, vec3_t normal, vec3_t color, const char *flareShader, int lightStyle );
 mapDrawSurface_t            *DrawSurfaceForShader( char *shader );
 void                        ClipSidesIntoTree( entity_t *e, tree_t *tree );
 void                        MakeDebugPortalSurfs( tree_t *tree );
@@ -1886,6 +1876,8 @@ Q_EXTERN game_t games[]
 	,
 								#include "game_tremulous.h" /*LinuxManMikeC: must be after game_quake3.h, depends on #define's set in it */
 	,
+								#include "game_unvanquished.h" /* must be after game_quake3.h as they share defines! */
+	,
 								#include "game_tenebrae.h"
 	,
 								#include "game_wolf.h"
@@ -1906,7 +1898,7 @@ Q_EXTERN game_t games[]
 	,
 								#include "game_reaction.h" /* must be after game_quake3.h */
 	,
-	{ NULL }                                /* null game */
+	#include "game__null.h" /* null game (must be last item) */
 	};
 #endif
 Q_EXTERN game_t             *game Q_ASSIGN( &games[ 0 ] );

@@ -26,17 +26,12 @@
 //
 
 #include "stdafx.h"
-#ifdef _WIN32
-extern "C" {
-#include <gdk/gdkwin32.h>
-}
-#endif
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 #include <gdk/gdkkeysyms.h>
 #include <gdk/gdkprivate.h>
 #include <sys/stat.h>
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
   #include <unistd.h>
 #endif
 #include "gtkmisc.h"
@@ -557,6 +552,7 @@ gint HandleCommand( GtkWidget *widget, gpointer data ){
 		  case ID_TEXTURES_LOAD: g_pParentWnd->OnTexturesLoad(); break;
 		  case ID_TEXTURES_RELOADSHADERS: g_pParentWnd->OnTexturesReloadshaders(); break;
 		  case ID_TEXTURES_SHADERS_SHOW: g_pParentWnd->OnTexturesShadersShow(); break;
+		  case ID_TEXTURES_EMPTYDIRS_HIDE: g_pParentWnd->OnTexturesEmptyDirsHide(); break;
 		  case ID_TEXTURES_TEXTUREWINDOWSCALE_200:
 		  case ID_TEXTURES_TEXTUREWINDOWSCALE_100:
 		  case ID_TEXTURES_TEXTUREWINDOWSCALE_50:
@@ -907,7 +903,8 @@ void MainFrame::process_xlink( Str &FileName, const char *menu_name, const char 
 				if ( !strcmp( (const char*)pNode->name, "item" ) ) {
 					// process the URL
 					Str *url;
-					if ( strstr( (char *)xmlGetProp( pNode, (xmlChar *)"url" ), "http://" ) ) {
+					if ( strstr( (char *)xmlGetProp( pNode, (xmlChar *)"url" ), "http://" )
+						|| strstr( (char *)xmlGetProp( pNode, (xmlChar *)"url" ), "https://" ) ) {
 						// complete URL
 						url = new Str;
 						*url = (char *)xmlGetProp( pNode, (xmlChar *)"url" );
@@ -1406,9 +1403,13 @@ void MainFrame::create_main_menu( GtkWidget *window, GtkWidget *vbox ){
 	item = create_check_menu_item_with_mnemonic( menu, _( "shaderlist.txt only" ),
 												 G_CALLBACK( HandleCommand ), ID_TEXTURES_SHADERLISTONLY, FALSE );
 	g_object_set_data( G_OBJECT( window ), "menu_textures_shaderlistonly", item );
+	item = create_check_menu_item_with_mnemonic( menu, _( "Hide empty directories" ),
+												 G_CALLBACK( HandleCommand ), ID_TEXTURES_EMPTYDIRS_HIDE, FALSE );
+	g_object_set_data( G_OBJECT( window ), "menu_textures_emptydirs_hide", item );
 	item = menu_separator( menu );
-	g_object_set_data( G_OBJECT( window ), "menu_textures_separator", item );
-	g_object_set_data( G_OBJECT( window ), "menu_textures", menu );
+
+	menu_in_menu = create_menu_in_menu_with_mnemonic( menu, _( "Texture Directories" ) );
+	g_object_set_data( G_OBJECT( window ), "menu_texture_dirs", menu_in_menu );
 
 	// Misc menu
 	menu = create_sub_menu_with_mnemonic( menu_bar, _( "_Misc" ) );
@@ -1541,7 +1542,7 @@ void MainFrame::create_main_menu( GtkWidget *window, GtkWidget *vbox ){
 		item = create_menu_item_with_mnemonic( menu, _( "Simple Patch Mesh..." ),
 											   G_CALLBACK( HandleCommand ), ID_CURVE_SIMPLEPATCHMESH );
 		g_object_set_data( G_OBJECT( window ), "menu_simplepatchmesh", item );
-		create_menu_item_with_mnemonic( menu, _( "Patch Inspector" ), G_CALLBACK( HandleCommand ), ID_PATCH_INSPECTOR );
+		create_menu_item_with_mnemonic( menu, _( "Patch Inspector..." ), G_CALLBACK( HandleCommand ), ID_PATCH_INSPECTOR );
 		menu_separator( menu );
 		menu_in_menu = create_menu_in_menu_with_mnemonic( menu, _( "Insert" ) );
 		create_menu_item_with_mnemonic( menu_in_menu, _( "Insert (2) Columns" ),
@@ -1821,7 +1822,7 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_MAKEHOLLOW ) );
 	g_object_set_data( G_OBJECT( window ), "tb_selection_makehollow", w );
 	w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "Hollow Touch" ), "",
-								 new_image_icon("selection_makehollow.png"),
+								 new_image_icon("selection_makehollowtouch.png"),
 								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_MAKEHOLLOW_TOUCH ) );
 	g_object_set_data( G_OBJECT( window ), "tb_selection_makehollow_touch", w );
 
@@ -2165,7 +2166,7 @@ void Clipboard_PasteMap(){
    Platform-independent GTK clipboard support.
    \todo Using GDK_SELECTION_CLIPBOARD fails on win32, so we use the win32 API directly for now.
  */
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 
 enum
 {
@@ -2204,12 +2205,12 @@ static void clipboard_clear( GtkClipboard *clipboard, gpointer user_data_or_owne
 static void clipboard_received( GtkClipboard *clipboard, GtkSelectionData *data, gpointer user_data ){
 	//g_Clipboard.SetLength( 0 );
 
-	if ( data->length < 0 ) {
+	if ( gtk_selection_data_get_length( data ) < 0 ) {
 		Sys_FPrintf( SYS_ERR, "Error retrieving selection\n" );
 	}
-	else if ( strcmp( gdk_atom_name( data->type ), clipboard_targets[0].target ) == 0 ) {
+	else if ( strcmp( gdk_atom_name( gtk_selection_data_get_data_type( data ) ), clipboard_targets[0].target ) == 0 ) {
 		g_Clipboard.SetLength( 0 );
-		g_Clipboard.Write( data->data, data->length );
+		g_Clipboard.Write( gtk_selection_data_get_data( data ), gtk_selection_data_get_length( data ) );
 	}
 
 	Clipboard_PasteMap();
@@ -2393,6 +2394,87 @@ GtkWidget* create_framed_widget( GtkWidget* widget ){
 	gtk_widget_show( widget );
 	gtk_widget_show( frame );
 	return frame;
+}
+
+static void textdirlist_activate( GtkTreeView *tree_view )
+{
+	GtkTreeSelection* selection;
+
+	GtkTreeModel* model;
+	GtkTreeIter iter;
+
+	selection = gtk_tree_view_get_selection( GTK_TREE_VIEW( tree_view ) );
+
+	if ( gtk_tree_selection_get_selected( selection, &model, &iter ) ) {
+		GtkTreePath* path = gtk_tree_model_get_path( model, &iter );
+		if ( gtk_tree_path_get_depth( path ) == 1 ) {
+			char* p;
+			gtk_tree_model_get( model, &iter, 0, &p, -1 );
+			
+			Texture_ShowDirectory_by_path( p );
+			g_free( p );
+		}
+		gtk_tree_path_free( path );
+	}
+}
+
+static void textdirlist_row_activated( GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data )
+{
+	textdirlist_activate( tree_view );
+}
+static void textdirlist_cursor_changed( GtkTreeView *tree_view, gpointer user_data )
+{
+	textdirlist_activate( tree_view );
+}
+
+GtkWidget* create_texdirlist_widget()
+{
+	GtkWidget *scr;
+	GtkWidget* view;
+
+	scr = gtk_scrolled_window_new( (GtkAdjustment*)NULL, (GtkAdjustment*)NULL );
+
+	gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW( scr ), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+	gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW( scr ), GTK_SHADOW_IN );
+
+	{
+		GtkListStore* store = gtk_list_store_new( 1, G_TYPE_STRING );
+
+		view = gtk_tree_view_new_with_model( GTK_TREE_MODEL( store ) );
+		gtk_tree_view_set_headers_visible( GTK_TREE_VIEW( view ), FALSE );
+
+		{
+			GtkCellRenderer* renderer = gtk_cell_renderer_text_new();
+			GtkTreeViewColumn* column = gtk_tree_view_column_new_with_attributes( "Textures", renderer, "text", 0, (char *) NULL );
+			gtk_tree_view_append_column( GTK_TREE_VIEW( view ), column );
+		}
+
+		gtk_container_add( GTK_CONTAINER( scr ), view );
+
+		g_object_set_data( G_OBJECT( g_qeglobals_gui.d_main_window ), "dirlist_treeview" , view );
+
+		GSList *texdirs = NULL;
+		FillTextureList( &texdirs );
+		FillTextureDirListWidget( texdirs );
+		ClearGSList( texdirs );
+
+		g_object_unref( G_OBJECT( store ) );
+
+		gtk_tree_selection_set_mode( gtk_tree_view_get_selection( GTK_TREE_VIEW( view ) ), GTK_SELECTION_SINGLE );
+#if GTK_CHECK_VERSION( 3,12,0 )
+		gtk_tree_view_set_activate_on_single_click( GTK_TREE_VIEW( view ), TRUE );
+#else
+		g_signal_connect( view, "cursor-changed", G_CALLBACK( textdirlist_cursor_changed ), view );
+#endif
+		g_signal_connect( view, "row-activated", G_CALLBACK( textdirlist_row_activated ), view );
+
+		gtk_widget_show( view );
+
+	}
+
+	gtk_widget_show( scr );
+
+	return scr;
 }
 
 gboolean entry_focus_in( GtkWidget *widget, GdkEventFocus *event, gpointer user_data ){
@@ -2662,7 +2744,27 @@ void MainFrame::Create(){
 						m_pTexWnd = new TexWnd();
 						{
 							GtkWidget* frame = create_framed_texwnd( m_pTexWnd );
-							gtk_paned_add2( GTK_PANED( vsplit2 ), frame );
+							if( g_PrefsDlg.m_bShowTexDirList ) {
+
+								GtkWidget* texDirList = create_texdirlist_widget();
+
+								GtkWidget* texSplit = gtk_hpaned_new();
+								m_pSplits[4] = texSplit;
+
+								gtk_paned_pack2( GTK_PANED( vsplit2 ), texSplit, TRUE, FALSE );
+								gtk_paned_add1( GTK_PANED( texSplit ), texDirList );
+								gtk_paned_add2( GTK_PANED( texSplit ), frame );
+
+								if( g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth >= 0 ) {
+									gtk_paned_set_position( GTK_PANED( texSplit ), g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth );
+								}
+
+								gtk_widget_show( texSplit );
+							} else
+							{
+								m_pSplits[4] = NULL;
+								gtk_paned_pack2( GTK_PANED( vsplit2 ), frame, TRUE, TRUE );
+							}
 						}
 
 						// console
@@ -2697,11 +2799,8 @@ void MainFrame::Create(){
 		else
 		{
 			gtk_paned_set_position( GTK_PANED( m_pSplits[2] ), g_PrefsDlg.mWindowInfo.nCamWidth );
-			while ( gtk_events_pending() ) gtk_main_iteration();
 			gtk_paned_set_position( GTK_PANED( m_pSplits[3] ), g_PrefsDlg.mWindowInfo.nXYWidth );
 		}
-
-		while ( gtk_events_pending() ) gtk_main_iteration();
 
 		gtk_paned_set_position( GTK_PANED( m_pSplits[1] ), g_PrefsDlg.mWindowInfo.nCamHeight );
 	}
@@ -2852,9 +2951,29 @@ void MainFrame::Create(){
 			GtkWidget* frame = create_framed_texwnd( m_pTexWnd );
 			m_pTexWnd->m_pParent = g_pGroupDlg->m_pWidget;
 
+			GtkWidget* w = gtk_label_new( _( "Textures" ) );
+			gtk_widget_show( w );
+
+			if( g_PrefsDlg.m_bShowTexDirList )
 			{
-				GtkWidget* w = gtk_label_new( _( "Textures" ) );
-				gtk_widget_show( w );
+				GtkWidget* texDirList = create_texdirlist_widget();
+
+				GtkWidget* texSplit = gtk_hpaned_new();
+				m_pSplits[4] = texSplit;
+
+				gtk_paned_add1( GTK_PANED( texSplit ), texDirList );
+				gtk_paned_add2( GTK_PANED( texSplit ), frame );
+
+				if( g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth >= 0 ) {
+					gtk_paned_set_position( GTK_PANED( texSplit ), g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth );
+				}
+
+				gtk_widget_show( texSplit );
+
+				gtk_notebook_insert_page( GTK_NOTEBOOK( g_pGroupDlg->m_pNotebook ), texSplit, w, 1 );
+			} else
+			{
+				m_pSplits[4] = NULL;
 				gtk_notebook_insert_page( GTK_NOTEBOOK( g_pGroupDlg->m_pNotebook ), frame, w, 1 );
 			}
 		}
@@ -2915,9 +3034,29 @@ void MainFrame::Create(){
 			m_pTexWnd = new TexWnd();
 			GtkWidget* frame = create_framed_texwnd( m_pTexWnd );
 
+			GtkWidget* w = gtk_label_new( _( "Textures" ) );
+			gtk_widget_show( w );
+
+			if( g_PrefsDlg.m_bShowTexDirList )
 			{
-				GtkWidget* w = gtk_label_new( _( "Textures" ) );
-				gtk_widget_show( w );
+				GtkWidget* texDirList = create_texdirlist_widget();
+
+				GtkWidget* texSplit = gtk_hpaned_new();
+				m_pSplits[4] = texSplit;
+
+				gtk_paned_add1( GTK_PANED( texSplit ), texDirList );
+				gtk_paned_add2( GTK_PANED( texSplit ), frame );
+
+				if( g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth >= 0 ) {
+					gtk_paned_set_position( GTK_PANED( texSplit ), g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth );
+				}
+
+				gtk_widget_show( texSplit );
+
+				gtk_notebook_insert_page( GTK_NOTEBOOK( g_pGroupDlg->m_pNotebook ), texSplit, w, 1 );
+			} else
+			{
+				m_pSplits[4] = NULL;
 				gtk_notebook_insert_page( GTK_NOTEBOOK( g_pGroupDlg->m_pNotebook ), frame, w, 1 );
 			}
 		}
@@ -2973,6 +3112,8 @@ void MainFrame::Create(){
 	g_bIgnoreCommands++;
 	item = GTK_WIDGET( g_object_get_data( G_OBJECT( m_pWidget ), "menu_textures_shaders_show" ) );
 	gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( item ), g_PrefsDlg.m_bShowShaders ? TRUE : FALSE );
+	item = GTK_WIDGET( g_object_get_data( G_OBJECT( m_pWidget ), "menu_textures_emptydirs_hide" ) );
+	gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( item ), g_PrefsDlg.m_bHideEmptyDirs ? TRUE : FALSE );
 	item = GTK_WIDGET( g_object_get_data( G_OBJECT( m_pWidget ), "menu_textures_shaderlistonly" ) );
 	gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( item ), g_PrefsDlg.m_bTexturesShaderlistOnly ? TRUE : FALSE );
 	g_bIgnoreCommands--;
@@ -3095,26 +3236,7 @@ static void Sys_Restore( GtkWidget *w ){
 		return;
 	}
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
-	Sys_FPrintf( SYS_WRN, "FIXME: Sys_Restore\n" );
-  #if 0
-	XWindowAttributes xattr;
-	GdkWindowPrivate *Private;
-
-	Private = (GdkWindowPrivate*)gtk_widget_get_window( w );
-
-	xattr.map_state = IsUnmapped;
-	XGetWindowAttributes( Private->xdisplay, Private->xwindow, &xattr );
-
-	if ( xattr.map_state == IsUnmapped ) {
-		XMapRaised( Private->xdisplay, Private->xwindow );
-	}
-  #endif
-#endif
-
-#ifdef _WIN32
-	ShowWindow( (HWND)GDK_WINDOW_HWND( gtk_widget_get_window( w ) ), SW_RESTORE );
-#endif
+	gtk_window_deiconify( GTK_WINDOW( w ) );
 }
 
 #ifdef _DEBUG
@@ -3310,6 +3432,9 @@ void MainFrame::OnDelete(){
 	else{
 		g_PrefsDlg.mWindowInfo.nZFloatWidth = gtk_paned_get_position( GTK_PANED( m_pSplits[0] ) );
 	}
+	if( g_PrefsDlg.m_bShowTexDirList && m_pSplits[4] ) {
+		g_PrefsDlg.mWindowInfo.nTextureDirectoryListWidth = gtk_paned_get_position( GTK_PANED( m_pSplits[4] ) );
+	}
 
 	if ( CurrentStyle() == eFloating ) {
 		save_window_pos( m_pCamWnd->m_pParent, g_PrefsDlg.mWindowInfo.posCamWnd );
@@ -3468,7 +3593,7 @@ void MainFrame::LoadCommandMap(){
 	int j;
 
 
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 	strINI = g_PrefsDlg.m_rc_path->str;
 #elif defined( WIN32 )
 	strINI = g_strGameToolsPath;
@@ -3518,7 +3643,7 @@ void MainFrame::LoadCommandMap(){
 				// based on length
 				nLen = strBuff.GetLength();
 				if ( nLen == 1 ) { // most often case.. deal with first
-					g_Commands[i].m_nKey = __toascii( strBuff.GetAt( 0 ) );
+					g_Commands[i].m_nKey = toascii( strBuff.GetAt( 0 ) );
 					iCount++;
 				}
 				else // special key
@@ -4130,27 +4255,37 @@ void MainFrame::OnPlugIn( unsigned int nID, const char* str ){
 	m_PlugInMgr.Dispatch( nID, str );
 }
 
-inline GtkToolbarChildType gtktoolbarchildtype_for_toolbarbuttontype( IToolbarButton::EType type ){
+void toolbar_insert( GtkWidget *toolbar, const char* image, const char* text, const char* tooltip, IToolbarButton::EType type, GCallback callback, gpointer data ){
+	GtkToolItem *item;
+	
 	switch ( type )
 	{
 	case IToolbarButton::eSpace:
-		return GTK_TOOLBAR_CHILD_SPACE;
+		item = gtk_separator_tool_item_new();
+		break;
 	case IToolbarButton::eButton:
-		return GTK_TOOLBAR_CHILD_BUTTON;
+		item = gtk_tool_button_new( new_plugin_image_icon( image ), text );
+		break;
 	case IToolbarButton::eToggleButton:
-		return GTK_TOOLBAR_CHILD_TOGGLEBUTTON;
+		item = gtk_toggle_tool_button_new();
+		gtk_tool_button_set_icon_widget( GTK_TOOL_BUTTON( item ), new_plugin_image_icon( image ) );
+		gtk_tool_button_set_label( GTK_TOOL_BUTTON( item ), text );
+		break;
 	case IToolbarButton::eRadioButton:
-		return GTK_TOOLBAR_CHILD_RADIOBUTTON;
+		item = gtk_radio_tool_button_new( NULL );
+		gtk_tool_button_set_icon_widget( GTK_TOOL_BUTTON( item ), new_plugin_image_icon( image ) );
+		break;
+	default:
+		Error( "invalid toolbar button type" );
+		break;
 	}
-	Error( "invalid toolbar button type" );
-	return (GtkToolbarChildType)0;
-}
+	
+	gtk_widget_set_tooltip_text( GTK_WIDGET( item ), tooltip );
+	g_signal_connect( item, "clicked", callback, data );
 
-void toolbar_insert( GtkWidget *toolbar, const char* image, const char* text, const char* tooltip, IToolbarButton::EType type, GCallback callback, gpointer data ){
-	GtkWidget *pixmap;
+	gtk_toolbar_insert( GTK_TOOLBAR( toolbar ), item, -1 );
+	gtk_widget_show( GTK_WIDGET( item ) );
 
-	pixmap = new_plugin_image_icon( image );
-	gtk_toolbar_append_element( GTK_TOOLBAR( toolbar ), gtktoolbarchildtype_for_toolbarbuttontype( type ), NULL, text, tooltip, "", GTK_WIDGET( pixmap ), callback, data );
 }
 
 void SignalToolbarButton( GtkWidget *widget, gpointer data ){
@@ -4651,6 +4786,7 @@ void MainFrame::OnPrefs() {
     bool    bPluginToolbar      = g_PrefsDlg.m_bPluginToolbar;
     bool    bDetachableMenus    = g_PrefsDlg.m_bDetachableMenus;
     bool    bFloatingZ          = g_PrefsDlg.m_bFloatingZ;
+	bool    bShowTexDirList     = g_PrefsDlg.m_bShowTexDirList;
 
     g_PrefsDlg.LoadPrefs();
 
@@ -4662,7 +4798,8 @@ void MainFrame::OnPrefs() {
            (g_PrefsDlg.m_bLatchedPluginToolbar      != bPluginToolbar   ) ||
            (g_PrefsDlg.m_nLatchedShader             != nShader          ) ||
            (g_PrefsDlg.m_nLatchedTextureQuality     != nTextureQuality  ) || 
-           (g_PrefsDlg.m_bLatchedFloatingZ          != bFloatingZ)) {
+           (g_PrefsDlg.m_bLatchedFloatingZ          != bFloatingZ       ) ||
+		   (g_PrefsDlg.m_bShowTexDirList            != bShowTexDirList)) {
             gtk_MessageBoxNew(m_pWidget, _( "You must restart Radiant for the "
                               "changes to take effect." ), _( "Restart Radiant" ), 
                               MB_OK | MB_ICONINFORMATION);
@@ -5812,6 +5949,26 @@ void MainFrame::OnTexturesReloadshaders(){
 	Texture_SetTexture( &g_qeglobals.d_texturewin.texdef, &g_qeglobals.d_texturewin.brushprimit_texdef, false, NULL, false );
 	Sys_UpdateWindows( W_ALL );
 	Sys_EndWait();
+
+	GSList *texdirs = NULL;
+	FillTextureList( &texdirs );
+	FillTextureMenu( texdirs );
+	FillTextureDirListWidget( texdirs );
+	ClearGSList( texdirs );
+}
+
+void MainFrame::OnTexturesEmptyDirsHide(){
+	g_PrefsDlg.m_bHideEmptyDirs ^= 1;
+	GtkWidget *item = GTK_WIDGET( g_object_get_data( G_OBJECT( m_pWidget ), "menu_textures_emptydirs_hide" ) );
+	g_bIgnoreCommands++;
+	gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( item ), g_PrefsDlg.m_bHideEmptyDirs ? TRUE : FALSE );
+	g_bIgnoreCommands--;
+
+	GSList *texdirs = NULL;
+	FillTextureList( &texdirs );
+	FillTextureMenu( texdirs );
+	FillTextureDirListWidget( texdirs );
+	ClearGSList( texdirs );
 }
 
 void MainFrame::OnTexturesShadersShow(){
@@ -5903,7 +6060,12 @@ void MainFrame::OnTexturesShaderlistonly(){
 	g_bIgnoreCommands++;
 	gtk_check_menu_item_set_active( GTK_CHECK_MENU_ITEM( item ), g_PrefsDlg.m_bTexturesShaderlistOnly ? TRUE : FALSE );
 	g_bIgnoreCommands--;
-	FillTextureMenu();
+
+	GSList *texdirs = NULL;
+	FillTextureList( &texdirs );
+	FillTextureMenu( texdirs );
+	FillTextureDirListWidget( texdirs );
+	ClearGSList( texdirs );
 }
 
 void MainFrame::OnTextureWad( unsigned int nID ){

@@ -29,7 +29,7 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <assert.h>
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
@@ -105,6 +105,9 @@
 #define CHASEMOUSE_KEY          "ChaseMouse"
 #define MOUSEWHEELZOOM_KEY      "MousewheelZoom"
 #define ENTITYSHOW_KEY          "EntityShow"
+#define FIXEDTEXSIZE_KEY        "UseFixedTextureSize"
+#define FIXEDTEXSIZEWIDTH_KEY   "FixedTextureSizeWidth"
+#define FIXEDTEXSIZEHEIGHT_KEY  "FixedTextureSizeHeight"
 #define TEXTURESCALE_KEY        "TextureScale"
 #define TEXTURESCROLLBAR_KEY    "TextureScrollbar"
 #define DISPLAYLISTS_KEY        "UseDisplayLists"
@@ -116,9 +119,11 @@
 #define TEXTURESUBSET_KEY         "UseTextureSubsetLoading"
 #define TEXTUREQUALITY_KEY      "TextureQuality"
 #define SHOWSHADERS_KEY           "ShowShaders"
+#define HIDEEMPTYDIRS_KEY       "HideEmptyDirs"
 #define SHADERTEST_KEY          "ShaderTest"
 #define GLLIGHTING_KEY          "UseGLLighting"
 #define LOADSHADERS_KEY         "LoadShaders"
+#define SHOWTEXDIRLIST_KEY		"ShowTextureDirectoryList"
 #define NOSTIPPLE_KEY           "NoStipple"
 #define UNDOLEVELS_KEY          "UndoLevels"
 #define VERTEXMODE_KEY          "VertexSplit"
@@ -135,6 +140,7 @@
 #define DEFAULTTEXURESCALE_KEY  "DefaultTextureScale"
 #define CAULKNEWBRUSHES_KEY     "CaulkNewBrushes"
 #define CLIPCAULK_KEY           "ClipCaulk"
+#define HOLLOWCAULK_KEY         "HollowCaulk"
 #define PATCHSHOWBOUNDS_KEY     "PatchShowBounds"
 #define NATIVEGUI_KEY           "NativeGUI"
 #define STARTONPRIMMON_KEY      "StartOnPrimMon"
@@ -155,10 +161,6 @@
 
 #ifdef ATIHACK_812
 #define ATIHACK_KEY "ATIHack"
-#endif
-
-#ifdef NVIDIA_AERO_HACK
-#define NVAEROHACK_KEY "NvidiaAeroHack"
 #endif
 
 // window stuff
@@ -185,6 +187,7 @@
 #define CAMHEIGHT_KEY     "CamHeight"
 #define ZFLOATWIDTH_KEY   "ZWidthFloating"
 #define STATE_KEY         "State"
+#define TEXDIRLISTWIDTH_KEY         "TextureDirectoryListWidth"
 
 // menu stuff
 #define COUNT_KEY         "Count"
@@ -634,11 +637,15 @@ PrefsDlg::PrefsDlg (){
 	m_bSelectCurves = TRUE;
 	m_bSelectModels = TRUE;
 	m_nEntityShowState = ENTITY_SKINNED_BOXED;
+	m_bFixedTextureSize = TRUE;
+	m_nFixedTextureSizeWidth = 64;
+	m_nFixedTextureSizeHeight = 64;
 	m_nTextureScale = 2;
 	m_bSwitchClip = FALSE;
 	m_bSelectWholeEntities = TRUE;
 	m_nTextureQuality = 3;
 	m_bShowShaders = TRUE;
+	m_bHideEmptyDirs = FALSE;
 	m_bGLLighting = FALSE;
 	m_nShader = 0;
 	m_nUndoLevels = 30;
@@ -654,7 +661,6 @@ PrefsDlg::PrefsDlg (){
 	m_nSubdivisions = 4;
 	// not prefs
 	m_bFloatingZ = FALSE;
-	m_bGlPtWorkaround = FALSE;  // Gef: Kyro/GL_POINTS workaround 25-aug-2001
 #ifdef _WIN32
 	m_bNativeGUI = FALSE;
 	m_bStartOnPrimMon = FALSE;
@@ -674,10 +680,6 @@ PrefsDlg::PrefsDlg (){
 #endif
 #ifdef ATIHACK_812
 	m_bGlATIHack = FALSE;
-#endif
-#ifdef NVIDIA_AERO_HACK
-	m_bGlNvidiaAeroHack = TRUE;
-	m_bGlNvidiaAeroHackPrevState = -1; // -1 is uninitialized, 0 is FALSE, 1 is TRUE
 #endif
 }
 
@@ -794,7 +796,7 @@ CGameDescription::CGameDescription( xmlDocPtr pDoc, const Str &GameFile ){
 	if ( prop == NULL ) {
 #ifdef _WIN32
 		mEngine = "quake3.exe";
-#elif __linux__
+#elif defined( __linux__ ) || defined( __FreeBSD__ )
 		mEngine = "quake3";
 #elif __APPLE__
 		mEngine = "Quake3.app";
@@ -808,7 +810,7 @@ CGameDescription::CGameDescription( xmlDocPtr pDoc, const Str &GameFile ){
 	if ( prop == NULL ) {
 #ifdef _WIN32
 		mMultiplayerEngine = "quake3.exe";
-#elif __linux__
+#elif defined( __linux__ ) || defined( __FreeBSD__ )
 		mMultiplayerEngine = "quake3";
 #elif __APPLE__
 		mMultiplayerEngine = "Quake3.app";
@@ -1321,7 +1323,7 @@ void CGameDialog::Init(){
 
 	// Add the per-user game path on all platforms
 	if ( m_pCurrentGameDescription->mUserPathPrefix.GetLength() ) {
-#if defined ( __linux__ ) || defined ( __APPLE__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		g_qeglobals.m_strHomeGame = g_get_home_dir();
 		g_qeglobals.m_strHomeGame += "/";
 		g_qeglobals.m_strHomeGame += m_pCurrentGameDescription->mUserPathPrefix.GetBuffer();
@@ -1553,11 +1555,12 @@ void PrefsDlg::BuildDialog(){
 	// Main Preferences dialog
 	GtkWidget *dialog, *mainvbox, *hbox, *sc_win, *preflabel;
 
+	GtkWidget *ftw_label, *fth_label;
 	// Widgets on notebook pages
 	GtkWidget *check, *label, *scale, *hbox2, *combo,
 	*table, *spin,  *entry, *pixmap,
 	*radio, *button, *pageframe, *vbox;
-
+	GtkSizeGroup *size_group;
 	GList *combo_list = (GList*)NULL;
 	GList *lst;
 	GtkAdjustment *adj;
@@ -1746,14 +1749,17 @@ void PrefsDlg::BuildDialog(){
 	gtk_widget_set_size_request( GTK_WIDGET( vbox ), 350, -1 );
 	gtk_widget_show( vbox );
 
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	gint page_index;
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_FRONT );
 
 	/******** global preferences group ****************************/
 	preflabel = gtk_label_new( _( "Globals" ) );
 	gtk_widget_show( preflabel );
 
 	pageframe = mGamesDialog.GetGlobalFrame();
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_GAME_SETTINGS );
 
 	/******** 2D prefs group (xy views/rendering options) *********/
 	preflabel = gtk_label_new( _( "2D Display" ) );
@@ -1791,13 +1797,6 @@ void PrefsDlg::BuildDialog(){
 	gtk_widget_show( check );
 	AddDialogData( check, &m_bSizePaint, DLG_CHECK_BOOL );
 
-	// Alternate vertex/edge handles
-	// Gef: Kyro GL_POINT work around 25-aug-2001
-	check = gtk_check_button_new_with_label( _( "Alternate vertex/edge handles" ) );
-	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
-	gtk_widget_show( check );
-	AddDialogData( check, &m_bGlPtWorkaround, DLG_CHECK_BOOL );
-
 #ifdef ATIHACK_812
 	// ATI bugs
 	check = gtk_check_button_new_with_label( _( "ATI and Intel cards w/ buggy drivers (disappearing polygons)" ) );
@@ -1806,15 +1805,9 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( check, &m_bGlATIHack, DLG_CHECK_BOOL );
 #endif
 
-#ifdef NVIDIA_AERO_HACK
-	check = gtk_check_button_new_with_label( _( "NVIDIA/Aero bug - disable Windows composition" ) );
-	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
-	gtk_widget_show( check );
-	AddDialogData( check, &m_bGlNvidiaAeroHack, DLG_CHECK_BOOL );
-#endif
-
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_2D );
 
 	/******** 3D Camera view group *********/
 	preflabel = gtk_label_new( _( "3D View" ) );
@@ -1953,7 +1946,8 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( check, &m_bCamXYUpdate, DLG_CHECK_BOOL );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_CAMERA );
 
 	/******** Texture group *********/
 	preflabel = gtk_label_new( _( "Textures" ) );
@@ -2105,9 +2099,56 @@ void PrefsDlg::BuildDialog(){
 		gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT( combo ), (const char *)lst->data );
 	}
 	g_list_free( combo_list );
+	
+	check = gtk_check_button_new_with_label( _( "Use Fixed Texture Size" ) );
+	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
+	gtk_widget_show( check );
+	AddDialogData( check, &m_bFixedTextureSize, DLG_CHECK_BOOL );
+
+	hbox2 = gtk_hbox_new( FALSE, 5 );
+	gtk_box_pack_start( GTK_BOX( vbox ), hbox2, FALSE, FALSE, 0 );
+	gtk_widget_show( hbox2 );
+
+	ftw_label = label = gtk_label_new( _( "Fixed Texture Wdith" ) );
+	gtk_box_pack_start( GTK_BOX( hbox2 ), label, FALSE, FALSE, 0 );
+	gtk_misc_set_alignment( GTK_MISC( label ), 0.0, 0.0 );
+	gtk_widget_show( label );
+
+	spin = gtk_spin_button_new( GTK_ADJUSTMENT( gtk_adjustment_new( 1, 1, 1024, 1, 10, 0 ) ), 1, 0 );
+	gtk_spin_button_set_numeric( GTK_SPIN_BUTTON( spin ), TRUE );
+	g_object_set( spin, "xalign", 1.0, (char*)NULL );
+	gtk_box_pack_start( GTK_BOX( hbox2 ), spin, FALSE, FALSE, 0 );
+	gtk_widget_show( spin );
+	AddDialogData( spin, &m_nFixedTextureSizeWidth, DLG_SPIN_INT );
+
+	hbox2 = gtk_hbox_new( FALSE, 5 );
+	gtk_box_pack_start( GTK_BOX( vbox ), hbox2, FALSE, FALSE, 0 );
+	gtk_widget_show( hbox2 );
+
+	fth_label = label = gtk_label_new( _( "Fixed Texture Height" ) );
+	gtk_box_pack_start( GTK_BOX( hbox2 ), label, FALSE, FALSE, 0 );
+	gtk_misc_set_alignment( GTK_MISC( label ), 0.0, 0.0 );
+	gtk_widget_show( label );
+
+	spin = gtk_spin_button_new( GTK_ADJUSTMENT( gtk_adjustment_new( 1, 1, 1024, 1, 10, 0 ) ), 1, 0 );
+	gtk_spin_button_set_numeric( GTK_SPIN_BUTTON( spin ), TRUE );
+	g_object_set( spin, "xalign", 1.0, (char*)NULL );
+	gtk_box_pack_start( GTK_BOX( hbox2 ), spin, FALSE, FALSE, 0 );
+	gtk_widget_show( spin );
+	AddDialogData( spin, &m_nFixedTextureSizeHeight, DLG_SPIN_INT );
+
+	size_group = gtk_size_group_new( GTK_SIZE_GROUP_HORIZONTAL );
+	gtk_size_group_add_widget( size_group, ftw_label );
+	gtk_size_group_add_widget( size_group, fth_label );
+	g_object_unref( size_group );
+	check = gtk_check_button_new_with_label( _( "Show Texture Directory List" ) );
+	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
+	gtk_widget_show( check );
+	AddDialogData( check, &m_bShowTexDirList, DLG_CHECK_BOOL );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_TEXTURE );
 
 	/******** Layout group *********/
 	preflabel = gtk_label_new( _( "Layout" ) );
@@ -2236,7 +2277,8 @@ void PrefsDlg::BuildDialog(){
 #endif
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_LAYOUT );
 
 	/******** Mouse group *********/
 	preflabel = gtk_label_new( _( "Mouse" ) );
@@ -2310,7 +2352,8 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( spin, &m_nWheelInc, DLG_SPIN_INT );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_MOUSE );
 
 	/******** Editing group *********/
 	preflabel = gtk_label_new( _( "Editing" ) );
@@ -2340,6 +2383,12 @@ void PrefsDlg::BuildDialog(){
 	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
 	gtk_widget_show( check );
 	AddDialogData( check, &m_bClipCaulk, DLG_CHECK_BOOL );
+
+	// Make Hollow uses caulk
+	check = gtk_check_button_new_with_label( _( "Make Hollow uses caulk" ) );
+	gtk_box_pack_start( GTK_BOX( vbox ), check, FALSE, FALSE, 0 );
+	gtk_widget_show( check );
+	AddDialogData( check, &m_bMakeHollowCaulk, DLG_CHECK_BOOL );
 
 	// Don't clamp plane points
 	check = gtk_check_button_new_with_label( _( "Don't clamp plane points" ) );
@@ -2423,7 +2472,8 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( spin, &m_nSubdivisions, DLG_SPIN_INT );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_EDITING );
 
 	/******** Save/Load group *********/
 	preflabel = gtk_label_new( _( "Startup/Auto save" ) );
@@ -2487,7 +2537,8 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( check, &m_bSaveBeep, DLG_CHECK_BOOL );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_STARTUP );
 
 	/******** Paths group *********/
 	preflabel = gtk_label_new( _( "Paths" ) );
@@ -2560,7 +2611,8 @@ void PrefsDlg::BuildDialog(){
 	gtk_widget_show( button );
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_PATHS );
 
 	/******** Brush group ********/
 	preflabel = gtk_label_new( _( "Brush" ) );
@@ -2591,7 +2643,7 @@ void PrefsDlg::BuildDialog(){
 	gtk_misc_set_alignment( GTK_MISC( label ), 0.0, 0.5 );
 	gtk_widget_show( label );
 
-	spin = gtk_spin_button_new( GTK_ADJUSTMENT( gtk_adjustment_new( 0.5, 0, 65535, 0.1, 1, 0 ) ), 1, 1 );
+	spin = gtk_spin_button_new( GTK_ADJUSTMENT( gtk_adjustment_new( 0.5, 0, 65535, 0.1, 1, 0 ) ), 1, 6 );
 	gtk_spin_button_set_numeric( GTK_SPIN_BUTTON( spin ), TRUE );
 	gtk_entry_set_alignment( GTK_ENTRY( spin ), 1.0 ); //right
 	gtk_table_attach( GTK_TABLE( table ), spin, 1, 2, 0, 1,
@@ -2608,7 +2660,8 @@ void PrefsDlg::BuildDialog(){
 	AddDialogData( check, &m_bCaulkNewBrushes, DLG_CHECK_BOOL );
 	
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_BRUSH );
 
 	/******** Misc group *********/
 	preflabel = gtk_label_new( _( "Misc" ) );
@@ -2636,6 +2689,7 @@ void PrefsDlg::BuildDialog(){
 	gtk_widget_show( table );
 
 	label = gtk_label_new( _( "Light radiuses:" ) );
+
 	gtk_table_attach( GTK_TABLE( table ), label, 0, 1, 0, 1,
 					  (GtkAttachOptions) ( 0 ),
 					  (GtkAttachOptions) ( 0 ), 0, 0 );
@@ -2713,7 +2767,8 @@ void PrefsDlg::BuildDialog(){
 #endif
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_MISC );
 
 	/******** BSP Monitoring group *********/
 	// this is never displayed if the plugin isn't available
@@ -2775,7 +2830,8 @@ void PrefsDlg::BuildDialog(){
 #endif
 
 	// Add the page to the notebook
-	gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	page_index = gtk_notebook_append_page( GTK_NOTEBOOK( notebook ), pageframe, preflabel );
+	assert( page_index == PTAB_BSPMONITOR );
 
 	gtk_notebook_set_current_page( GTK_NOTEBOOK( notebook ), PTAB_FRONT );
 }
@@ -2886,44 +2942,6 @@ void PrefsDlg::UpdateATIHack() {
 }
 #endif
 
-#ifdef NVIDIA_AERO_HACK
-void PrefsDlg::UpdateNvidiaAeroHack() {
-	if ( m_bGlNvidiaAeroHack && m_bGlNvidiaAeroHackPrevState == 1 ) {
-		return;
-	}
-	if ( ( !m_bGlNvidiaAeroHack ) && m_bGlNvidiaAeroHackPrevState == 0 ) {
-		return;
-	}
-	if ( ( !m_bGlNvidiaAeroHack ) && m_bGlNvidiaAeroHackPrevState < 0 ) {
-		// The hack state is uninitialized, meaning that this is the first call
-		// to this function.  I prefer not to explicitly enable composition because
-		// the user may have set the application to disable it, and I don't want to
-		// override that.  Leave the state of composition as-is if the hack checkbox
-		// isn't checked.
-		m_bGlNvidiaAeroHackPrevState = 0;
-		return;
-	}
-	HMODULE lib = LoadLibrary( "dwmapi.dll" );
-	if ( lib ) {
-		void ( WINAPI *qDwmEnableComposition )( bool bEnable ) =
-			( void (WINAPI *) ( bool bEnable ) )GetProcAddress( lib, "DwmEnableComposition" );
-		if ( qDwmEnableComposition ) {
-			if ( m_bGlNvidiaAeroHack ) {
-				Sys_Printf( "Disabling Windows composition\n" );
-				qDwmEnableComposition( 0 );
-				m_bGlNvidiaAeroHackPrevState = 1;
-			}
-			else {
-				Sys_Printf( "Enabling Windows composition\n" );
-				qDwmEnableComposition( 1 );
-				m_bGlNvidiaAeroHackPrevState = 0;
-			}
-		}
-		FreeLibrary( lib );
-	}
-}
-#endif
-
 // TTimo: m_strEnginePath has a special status, if not found in registry we need to
 // initiliaze it for sure. It is not totally failsafe but we can use the same
 // code than in q3map, expecting to find some "quake" above us. If not, we prompt
@@ -2984,7 +3002,7 @@ void PrefsDlg::LoadPrefs(){
 	mLocalPrefs.GetPref( CAMINVERSEMOUSE_KEY,    &m_bCamInverseMouse,    FALSE );
 	mLocalPrefs.GetPref( CAMDISCRETE_KEY,        &m_bCamDiscrete,        TRUE );
 	mLocalPrefs.GetPref( LIGHTDRAW_KEY,          &m_bNewLightDraw,       TRUE );
-	mLocalPrefs.GetPref( CUBICCLIP_KEY,          &m_bCubicClipping,      TRUE );
+	mLocalPrefs.GetPref( CUBICCLIP_KEY,          &m_bCubicClipping,      FALSE );
 	mLocalPrefs.GetPref( CUBICSCALE_KEY,         &m_nCubicScale,         13 );
 	mLocalPrefs.GetPref( ALTEDGE_KEY,            &m_bALTEdge,            FALSE );
 	mLocalPrefs.GetPref( FACECOLORS_KEY,         &m_bFaceColors,         FALSE );
@@ -3024,6 +3042,13 @@ void PrefsDlg::LoadPrefs(){
 	mLocalPrefs.GetPref( LOADSHADERS_KEY,        &m_nLatchedShader,                     0 );
 	m_nShader = m_nLatchedShader;
 
+	
+	mLocalPrefs.GetPref( FIXEDTEXSIZE_KEY,       &m_bFixedTextureSize,          FALSE );
+	mLocalPrefs.GetPref( FIXEDTEXSIZEWIDTH_KEY,  &m_nFixedTextureSizeWidth,     64 );
+	mLocalPrefs.GetPref( FIXEDTEXSIZEHEIGHT_KEY, &m_nFixedTextureSizeHeight,    64 );
+
+	mLocalPrefs.GetPref( SHOWTEXDIRLIST_KEY,     &m_bShowTexDirList,             TRUE );
+
 	mLocalPrefs.GetPref( NOCLAMP_KEY,            &m_bNoClamp,                    FALSE );
 	mLocalPrefs.GetPref( SNAP_KEY,               &m_bSnap,                       TRUE );
 	mLocalPrefs.GetPref( USERINI_KEY,            &m_strUserPath,                 "" );
@@ -3053,6 +3078,7 @@ void PrefsDlg::LoadPrefs(){
 	mLocalPrefs.GetPref( SWITCHCLIP_KEY,         &m_bSwitchClip,                 TRUE );
 	mLocalPrefs.GetPref( SELWHOLEENTS_KEY,       &m_bSelectWholeEntities,        TRUE );
 	mLocalPrefs.GetPref( SHOWSHADERS_KEY,        &m_bShowShaders,                TRUE );
+	mLocalPrefs.GetPref( HIDEEMPTYDIRS_KEY,      &m_bHideEmptyDirs,              FALSE );
 	mLocalPrefs.GetPref( GLLIGHTING_KEY,         &m_bGLLighting,                 FALSE );
 	mLocalPrefs.GetPref( NOSTIPPLE_KEY,          &m_bNoStipple,                  FALSE );
 	mLocalPrefs.GetPref( UNDOLEVELS_KEY,         &m_nUndoLevels,                 30 );
@@ -3067,13 +3093,11 @@ void PrefsDlg::LoadPrefs(){
 	mLocalPrefs.GetPref( CAULKNEWBRUSHES_KEY, &m_bCaulkNewBrushes,               TRUE );
 	mLocalPrefs.GetPref( SUBDIVISIONS_KEY,       &m_nSubdivisions,               SUBDIVISIONS_DEF );
 	mLocalPrefs.GetPref( CLIPCAULK_KEY,          &m_bClipCaulk,                  FALSE );
+	mLocalPrefs.GetPref( HOLLOWCAULK_KEY,        &m_bMakeHollowCaulk,            TRUE );
 	mLocalPrefs.GetPref( SNAPTTOGRID_KEY,        &m_bSnapTToGrid,                FALSE );
 	mLocalPrefs.GetPref( TARGETFIX_KEY,          &m_bDoTargetFix,                TRUE );
 	mLocalPrefs.GetPref( WHEELINC_KEY,           &m_nWheelInc,                   64 );
 	mLocalPrefs.GetPref( PATCHBBOXSEL_KEY,       &m_bPatchBBoxSelect,            FALSE );
-
-	// Gef: Kyro GL_POINT workaround
-	mLocalPrefs.GetPref( GLPOINTWORKAROUND_KEY,  &m_bGlPtWorkaround,             FALSE );
 
 	// window positioning
 	mLocalPrefs.GetPref( ENTITYSPLIT1_KEY,       &mWindowInfo.nEntitySplit1,     -1 );
@@ -3106,6 +3130,7 @@ void PrefsDlg::LoadPrefs(){
 #ifdef _WIN32
 	mLocalPrefs.GetPref( STATE_KEY,              &mWindowInfo.nState,            SW_SHOW );
 #endif
+	mLocalPrefs.GetPref( TEXDIRLISTWIDTH_KEY,        &mWindowInfo.nTextureDirectoryListWidth,      50 );
 
 	// menu stuff
 	mLocalPrefs.GetPref( COUNT_KEY,              &m_nMRUCount,                   0 );
@@ -3196,20 +3221,12 @@ void PrefsDlg::LoadPrefs(){
 	mLocalPrefs.GetPref( ATIHACK_KEY, &m_bGlATIHack, FALSE );
 #endif
 
-#ifdef NVIDIA_AERO_HACK
-	mLocalPrefs.GetPref( NVAEROHACK_KEY, &m_bGlNvidiaAeroHack, TRUE );
-#endif
-
 	Undo_SetMaxSize( m_nUndoLevels ); // set it internally as well / FIXME: why not just have one global value?
 
 	UpdateTextureCompression();
 
 #ifdef ATIHACK_812
 	UpdateATIHack();
-#endif
-
-#ifdef NVIDIA_AERO_HACK
-	UpdateNvidiaAeroHack();
 #endif
 
 	if ( mLocalPrefs.mbEmpty ) {
@@ -3257,9 +3274,6 @@ void PrefsDlg::PostModal( int code ){
 		Sys_LogFile();
 #ifdef ATIHACK_812
 		UpdateATIHack();
-#endif
-#ifdef NVIDIA_AERO_HACK
-		UpdateNvidiaAeroHack();
 #endif
 		if ( g_pParentWnd ) {
 			g_pParentWnd->SetGridStatus();
@@ -3376,37 +3390,49 @@ void CGameInstall::OnGameSelectChanged( GtkWidget *widget, gpointer data ) {
 	g_free( str );
 	i->UpdateData( FALSE );
 
+	GtkWidget *label = GTK_WIDGET( g_object_get_data( G_OBJECT( i->m_pWidget ), "executable_label" ) );
+	GtkWidget *entry = GTK_WIDGET( g_object_get_data( G_OBJECT( i->m_pWidget ), "executable_entry" ) );
+	GtkWidget *button = GTK_WIDGET( g_object_get_data( G_OBJECT( i->m_pWidget ), "executable_button" ) );
+
 	int game_id = i->m_availGames[ i->m_nComboSelect ];
 	if ( game_id == GAME_Q2 || game_id == GAME_QUETOO ) {
-		gtk_widget_show( i->m_executablesVBox );
+		gtk_widget_show( label );
+		gtk_widget_show( entry );
+		gtk_widget_show( button );
 	} else {
-		gtk_widget_hide( i->m_executablesVBox );
+		gtk_widget_hide( label );
+		gtk_widget_hide( entry );
+		gtk_widget_hide( button );
 	}
 }
 
 void CGameInstall::BuildDialog() {
-	GtkWidget *dlg, *vbox1, *frame, *vbox2, *button, *text, *game_select_combo, *entry, *hbox;
+	GtkWidget *dlg, *vbox1, *frame, *table, *button, *text, *game_select_combo, *entry, *hbox;
 
 	dlg = m_pWidget;
 	gtk_window_set_title( GTK_WINDOW( dlg ), _( "Configure games" ) );
 
 	vbox1 = gtk_vbox_new( FALSE, 5 );
 	gtk_container_set_border_width( GTK_CONTAINER( vbox1 ), 5 );
-	gtk_widget_show( vbox1 );
 	gtk_container_add( GTK_CONTAINER( dlg ), vbox1 );
+	gtk_widget_show( vbox1 );
 
 	frame = gtk_frame_new( _( "Configure a game" ) );
+	gtk_box_pack_start( GTK_BOX( vbox1 ), frame, TRUE, TRUE, 0 );
 	gtk_widget_show( frame );
-	gtk_container_add( GTK_CONTAINER( vbox1 ), frame );
 
-	vbox2 = gtk_vbox_new( FALSE, 5);
-	gtk_container_set_border_width( GTK_CONTAINER( vbox2 ), 5 );
-	gtk_widget_show( vbox2 );
-	gtk_container_add( GTK_CONTAINER( frame ), vbox2 );
+	table = gtk_table_new( 5, 2, FALSE );
+	gtk_table_set_row_spacings( GTK_TABLE( table ), 5 );
+	gtk_table_set_col_spacings( GTK_TABLE( table ), 5 );
+	gtk_container_set_border_width( GTK_CONTAINER( table ), 5 );
+	gtk_container_add( GTK_CONTAINER( frame ), table );
+	gtk_widget_show( table );
 
 	game_select_combo = gtk_combo_box_text_new();
+	gtk_table_attach( GTK_TABLE( table ), game_select_combo, 1, 2, 0, 1,
+					  (GtkAttachOptions) ( GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( game_select_combo );
-	gtk_box_pack_start( GTK_BOX( vbox2 ), game_select_combo, FALSE, FALSE, 0 );
 
 	int iGame = 0;
 	while ( m_availGames[ iGame ] != GAME_NONE ) {
@@ -3456,6 +3482,9 @@ void CGameInstall::BuildDialog() {
 		case GAME_WOLF:
 			gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT( game_select_combo ), _( "Return To Castle Wolfenstein" ) );
 			break;
+		case GAME_UNVANQUISHED:
+			gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT( game_select_combo ), _( "Unvanquished" ) );
+			break;
 		}
 		iGame++;
 	}
@@ -3463,67 +3492,83 @@ void CGameInstall::BuildDialog() {
 	g_signal_connect( G_OBJECT( game_select_combo ), "changed", G_CALLBACK( OnGameSelectChanged ), this );
 
 	text = gtk_label_new( _( "Name:" ) );
+	gtk_misc_set_alignment( GTK_MISC( text ), 0.0, 0.5 );
+	gtk_table_attach( GTK_TABLE( table ), text, 0, 1, 1, 2,
+					  (GtkAttachOptions) ( GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( text );
-	gtk_box_pack_start( GTK_BOX( vbox2 ), text, FALSE, FALSE, 0 );
 
 	entry = gtk_entry_new();
+	gtk_table_attach( GTK_TABLE( table ), entry, 1, 2, 1, 2,
+					  (GtkAttachOptions) ( GTK_EXPAND | GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( entry );
-	gtk_box_pack_start( GTK_BOX( vbox2 ), entry, FALSE, FALSE, 0 );
 	AddDialogData( entry, &m_strName, DLG_ENTRY_TEXT );
 
 	text = gtk_label_new( _( "Game directory:" ) );
+	gtk_misc_set_alignment( GTK_MISC( text ), 0.0, 0.5 );
+	gtk_table_attach( GTK_TABLE( table ), text, 0, 1, 2, 3,
+					  (GtkAttachOptions) ( GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( text );
-	gtk_box_pack_start( GTK_BOX( vbox2 ), text, FALSE, FALSE, 0 );
 
 	hbox = gtk_hbox_new( FALSE, 5 );
+	gtk_table_attach( GTK_TABLE( table ), hbox, 1, 2, 2, 3,
+					  (GtkAttachOptions) ( GTK_EXPAND | GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( hbox );
-	gtk_box_pack_start( GTK_BOX( vbox2 ), hbox, FALSE, FALSE, 0 );
 
 	entry = gtk_entry_new();
-	gtk_widget_show( entry );
 	gtk_box_pack_start( GTK_BOX( hbox ), entry, TRUE, TRUE, 0 );
+	gtk_widget_show( entry );
 	AddDialogData( entry, &m_strEngine, DLG_ENTRY_TEXT );
 
 	button = gtk_button_new_with_label( _( "..." ) );
-	gtk_widget_show( button );
 	g_signal_connect( G_OBJECT( button ), "clicked", G_CALLBACK( OnBtnBrowseEngine ), this );
 	gtk_box_pack_start( GTK_BOX( hbox ), button, FALSE, FALSE, 0 );
-
-        m_executablesVBox = gtk_vbox_new( TRUE, 0 );
-        gtk_box_pack_start( GTK_BOX( vbox2 ), m_executablesVBox, FALSE, FALSE, 0 );
-        gtk_widget_show( m_executablesVBox );
+	gtk_widget_show( button );
 
 	text = gtk_label_new( _( "Engine binaries directory:" ) );
+	gtk_misc_set_alignment( GTK_MISC( text ), 0.0, 0.5 );
+	gtk_table_attach( GTK_TABLE( table ), text, 0, 1, 3, 4,
+					  (GtkAttachOptions) ( GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( text );
-	gtk_box_pack_start( GTK_BOX( m_executablesVBox ), text, FALSE, FALSE, 0 );
+	g_object_set_data( G_OBJECT( dlg ), "executable_label", text );
 
 	hbox = gtk_hbox_new( FALSE, 5 );
+	gtk_table_attach( GTK_TABLE( table ), hbox, 1, 2, 3, 4,
+					  (GtkAttachOptions) ( GTK_EXPAND | GTK_FILL ),
+					  (GtkAttachOptions) ( 0 ), 0, 0 );
 	gtk_widget_show( hbox );
-	gtk_box_pack_start( GTK_BOX( m_executablesVBox ), hbox, FALSE, FALSE, 0 );
 
 	entry = gtk_entry_new();
-	gtk_widget_show( entry );
 	gtk_box_pack_start( GTK_BOX( hbox ), entry, TRUE, TRUE, 0 );
+	gtk_widget_show( entry );
 	AddDialogData( entry, &m_strExecutables, DLG_ENTRY_TEXT );
+	g_object_set_data( G_OBJECT( dlg ), "executable_entry", entry );
 
 	button = gtk_button_new_with_label( _( "..." ) );
-	gtk_widget_show( button );
 	g_signal_connect( G_OBJECT( button ), "clicked", G_CALLBACK( OnBtnBrowseExecutables ), this );
 	gtk_box_pack_start( GTK_BOX( hbox ), button, FALSE, FALSE, 0 );
+	gtk_widget_show( button );
+	g_object_set_data( G_OBJECT( dlg ), "executable_button", button );
+
+	hbox = gtk_hbox_new( FALSE, 0 );
+	gtk_box_pack_start( GTK_BOX( vbox1 ), hbox, FALSE, FALSE, 0 );
+	gtk_widget_show( hbox );
 
 	button = gtk_button_new_with_label( _( "OK" ) );
+	gtk_box_pack_start( GTK_BOX( hbox ), button, TRUE, TRUE, 0 );
 	gtk_widget_show( button );
-	gtk_box_pack_start( GTK_BOX( vbox1 ), button, TRUE, TRUE, 0 );
 	AddModalButton( button, IDOK );
 
 	button = gtk_button_new_with_label( _( "Cancel" ) );
+	gtk_box_pack_start( GTK_BOX( hbox ), button, TRUE, TRUE, 0 );
 	gtk_widget_show( button );
-	gtk_box_pack_start( GTK_BOX( vbox1 ), button, TRUE, TRUE, 0 );
 	AddModalButton( button, IDCANCEL );
 
-	gtk_widget_set_size_request( dlg, 320, -1 );
-
-        // triggers the callback - sets the game name, shows/hide extra settings depending on project
+	// triggers the callback - sets the game name, shows/hide extra settings depending on project
 	gtk_combo_box_set_active( GTK_COMBO_BOX( game_select_combo ), 0 );
 }
 
@@ -3606,6 +3651,10 @@ void CGameInstall::Run() {
 		gamePack = WOLF_PACK;
 		gameFilePath += WOLF_GAME;
 		break;
+	case GAME_UNVANQUISHED:
+		gamePack = UNVANQUISHED_PACK;
+		gameFilePath += UNVANQUISHED_GAME;
+		break;
 	default:
 		Error( "Invalid game selected: %d", m_availGames[ m_nComboSelect ] );
 	}
@@ -3683,7 +3732,7 @@ void CGameInstall::Run() {
 		break;
 	}
 	case GAME_QUETOO: {
-#if defined( __APPLE__ ) || defined( __linux__ )
+#if defined( __linux__ ) || defined( __FreeBSD__ ) || defined( __APPLE__ )
 		fprintf( fg, "  " ENGINE_ATTRIBUTE "=\"quetoo\"\n" );
 		fprintf( fg, "  " PREFIX_ATTRIBUTE "=\".quetoo\"\n" );
 #elif _WIN32
@@ -3736,7 +3785,7 @@ void CGameInstall::Run() {
 	case GAME_ET: {
 #ifdef _WIN32
 		fprintf( fg, "  " ENGINE_ATTRIBUTE "=\"ET.exe\"\n");
-#elif __linux__
+#elif defined( __linux__ ) || defined( __FreeBSD__ )
 		fprintf( fg, "  " ENGINE_ATTRIBUTE "=\"et\"\n" );
 #endif
 		fprintf( fg, "  prefix=\".etwolf\"\n" );
@@ -3789,6 +3838,20 @@ void CGameInstall::Run() {
 		if( CheckFile( dest.GetBuffer() ) != PATH_FILE ) {
 			Str source = gameInstallPath.GetBuffer();
 			source += "main/scripts/default_shaderlist.txt";
+			radCopyFile( source.GetBuffer(), dest.GetBuffer() );
+		}
+		break;
+	}
+	case GAME_UNVANQUISHED: {
+		fprintf( fg, "  prefix=\".unvanquished\"\n" );
+		fprintf( fg, "  basegame=\"pkg\"\n" );
+
+		// Hardcoded fix for "missing" shaderlist in gamepack
+		Str dest = m_strEngine.GetBuffer();
+		dest += "/pkg/scripts/shaderlist.txt";
+		if( CheckFile( dest.GetBuffer() ) != PATH_FILE ) {
+			Str source = gameInstallPath.GetBuffer();
+			source += "pkg/scripts/default_shaderlist.txt";
 			radCopyFile( source.GetBuffer(), dest.GetBuffer() );
 		}
 		break;
@@ -3856,6 +3919,9 @@ void CGameInstall::ScanGames() {
 		}
 		if ( stricmp( dirname, Q1_PACK ) == 0 ) {
 			m_availGames[ iGame++ ] = GAME_Q1;
+		}
+		if ( stricmp( dirname, UNVANQUISHED_PACK ) == 0) {
+			m_availGames[ iGame++ ] = GAME_UNVANQUISHED;
 		}
 	}
 	Sys_Printf( "No installable games found in: %s\n",
