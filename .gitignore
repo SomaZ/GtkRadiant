@@ -26,6 +26,7 @@
 *.tlog
 *.vcxproj.user
 *.zip
+*.opendb
 
 
 
