@@ -559,7 +559,13 @@ bool IsValidTextureName(char* name){
 			// more well-known suffixes
 			g_str_has_suffix( name, "_p" ) || // preview (used by qer_editorimage)
 			g_str_has_suffix( name, "_g" ) || // gloss
-			g_str_has_suffix( name, "_n" )    // normal
+			g_str_has_suffix( name, "_n" ) || // normal
+			// OpenJK & OpenJK 'Rend2'
+			g_str_has_suffix( name, "_glow" ) || // glow/emissive
+			g_str_has_suffix( name, "_e" ) ||	 // glow/emissive
+			g_str_has_suffix( name, "_nh" ) ||	 // normal height
+			g_str_has_suffix( name, "_rmo" ) ||  // packed PBR material (Roughness/Metallic/Occlusion)
+			g_str_has_suffix( name, "_spec" )	 // specular map with gloss in the alpha
 			) {
 		return false;
 	}
