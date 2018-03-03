@@ -1810,12 +1810,10 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_CSGSUBTRACT ) );
 	g_object_set_data( G_OBJECT( window ), "tb_selection_csgsubtract", w );
 
-	if ( g_PrefsDlg.m_bWideToolbar ) {
-		w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "CSG Merge" ), "",
-									 new_image_icon("selection_csgmerge.png"),
-									 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_CSGMERGE ) );
-		g_object_set_data( G_OBJECT( window ), "tb_selection_csgmerge", w );
-	}
+	w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "CSG Merge" ), "",
+								 new_image_icon("selection_csgmerge.png"),
+								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_CSGMERGE ) );
+	g_object_set_data( G_OBJECT( window ), "tb_selection_csgmerge", w );
 
 	w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "Hollow Overlap" ), "",
 								 new_image_icon("selection_makehollow.png"),
@@ -1825,13 +1823,6 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 								 new_image_icon("selection_makehollowtouch.png"),
 								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_MAKEHOLLOW_TOUCH ) );
 	g_object_set_data( G_OBJECT( window ), "tb_selection_makehollow_touch", w );
-
-	if ( g_PrefsDlg.m_bWideToolbar ) {
-		w = toolbar_append_element( GTK_TOOLBAR( toolbar ), TOOLBAR_CHILD_TOGGLEBUTTON, NULL,
-										"", _( "Clipper" ), "", new_image_icon("view_clipper.png"),
-										G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_VIEW_CLIPPER ) );
-		g_object_set_data( G_OBJECT( window ), "ttb_view_clipper", w );
-	}
 
 	toolbar_append_space( GTK_TOOLBAR( toolbar ) );
 
@@ -1898,11 +1889,6 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 										G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_VIEW_ENTITY ) );
 		g_object_set_data( G_OBJECT( window ), "ttb_view_entity", w );
 		toolbar_append_space( GTK_TOOLBAR( toolbar ) );
-		w = toolbar_append_element( GTK_TOOLBAR( toolbar ), TOOLBAR_CHILD_TOGGLEBUTTON, NULL,
-										"", _( "Clipper" ), "", new_image_icon("view_clipper.png"),
-										G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_VIEW_CLIPPER ) );
-		g_object_set_data( G_OBJECT( window ), "ttb_view_clipper", w );
-		toolbar_append_space( GTK_TOOLBAR( toolbar ) );
 	}
 
 	w = toolbar_append_element( GTK_TOOLBAR( toolbar ), TOOLBAR_CHILD_TOGGLEBUTTON, NULL,
@@ -1926,6 +1912,15 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 									"", _( "Disable Scaling Along Z" ), "", new_image_icon("scalelockz.png"),
 									G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SCALELOCKZ ) );
 	g_object_set_data( G_OBJECT( window ), "ttb_scalelockz", w );
+
+	toolbar_append_space( GTK_TOOLBAR( toolbar ) );
+
+	w = toolbar_append_element( GTK_TOOLBAR( toolbar ), TOOLBAR_CHILD_TOGGLEBUTTON, NULL,
+									"", _( "Clipper" ), "", new_image_icon("view_clipper.png"),
+									G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_VIEW_CLIPPER ) );
+	g_object_set_data( G_OBJECT( window ), "ttb_view_clipper", w );
+
+	toolbar_append_space( GTK_TOOLBAR( toolbar ) );
 
 	if ( g_PrefsDlg.m_bWideToolbar ) {
 		toolbar_append_space( GTK_TOOLBAR( toolbar ) );
