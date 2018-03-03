@@ -4,7 +4,6 @@
 /apple/target/*
 /bspc
 /build
-/install
 /packs
 /tools/urt/tools/quake3/q3map2/Debug
 /tools/urt/tools/quake3/q3map2/Release
@@ -17,6 +16,8 @@
 /radiant.v12.suo
 /radiant.VC.db
 /site.sconf
+*.iobj
+*.ipdb
 
 *.log
 *.pdb

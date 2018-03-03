@@ -1833,6 +1833,20 @@ void MainFrame::create_main_toolbar( GtkWidget *window, GtkWidget *vbox ){
 		g_object_set_data( G_OBJECT( window ), "ttb_view_clipper", w );
 	}
 
+	toolbar_append_space( GTK_TOOLBAR( toolbar ) );
+
+	w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "Drag Vertices" ), "",
+								 new_image_icon("drag_vertices.png"),
+								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_DRAGVERTECIES ) );
+	g_object_set_data( G_OBJECT( window ), "tb_selection_dragvertices", w );
+
+	w = toolbar_append_item( GTK_TOOLBAR( toolbar ), "", _( "Drag Edges" ), "",
+								 new_image_icon("drag_edges.png"),
+								 G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_SELECTION_DRAGEDGES ) );
+	g_object_set_data( G_OBJECT( window ), "tb_selection_dragedges", w );
+
+	toolbar_append_space( GTK_TOOLBAR( toolbar ) );
+
 	w = toolbar_append_element( GTK_TOOLBAR( toolbar ), TOOLBAR_CHILD_TOGGLEBUTTON, NULL,
 										"", _( "Make Detail Brushes" ), "", new_image_icon("toggle_struct.png"),
 										G_CALLBACK( HandleCommand ), GINT_TO_POINTER( ID_TOGGLE_DETAIL ) );
