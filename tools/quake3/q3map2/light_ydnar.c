@@ -93,6 +93,43 @@ void ColorToBytes( const float *color, byte *colorBytes, float scale ){
 	colorBytes[ 2 ] = sample[ 2 ];
 }
 
+void ColorScale(const float *color, float *colorFloats, float scale) {
+	int i;
+	float max, gamma;
+	vec3_t sample;
+
+
+	/* ydnar: scaling necessary for simulating r_overbrightBits on external lightmaps */
+	if (scale <= 0.0f) {
+		scale = 1.0f;
+	}
+
+	/* make a local copy */
+	VectorScale(color, scale, sample);
+
+	/* muck with it */
+	gamma = 1.0f / lightmapGamma;
+	for (i = 0; i < 3; i++)
+	{
+		/* handle negative light */
+		if (sample[i] < 0.0f) {
+			sample[i] = 0.0f;
+			continue;
+		}
+
+		/* gamma */
+		sample[i] = pow(sample[i] / 255.0f, gamma) * 255.0f;
+	}
+
+	/* compensate for ingame overbrighting/bitshifting */
+	VectorScale(sample, (1.0f / lightmapCompensate), sample);
+
+	/* store it off */
+	colorFloats[0] = sample[0];
+	colorFloats[1] = sample[1];
+	colorFloats[2] = sample[2];
+}
+
 
 
 /* -------------------------------------------------------------------------------

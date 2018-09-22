@@ -36,6 +36,9 @@
 /* dependencies */
 #include "q3map2.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 
 
 /* -------------------------------------------------------------------------------
@@ -1936,6 +1939,10 @@ static void SetupOutLightmap( rawLightmap_t *lm, outLightmap_t *olm ){
 	memset( olm->lightBits, 0, ( olm->customWidth * olm->customHeight / 8 ) + 8 );
 	olm->bspLightBytes = safe_malloc( olm->customWidth * olm->customHeight * 3 );
 	memset( olm->bspLightBytes, 0, olm->customWidth * olm->customHeight * 3 );
+
+	olm->bspLightFloats = safe_malloc(sizeof(float) * olm->customWidth * olm->customHeight * 3);
+	memset(olm->bspLightFloats, 0, sizeof(float) * olm->customWidth * olm->customHeight * 3);
+
 	if ( deluxemap ) {
 		olm->bspDirBytes = safe_malloc( olm->customWidth * olm->customHeight * 3 );
 		memset( olm->bspDirBytes, 0, olm->customWidth * olm->customHeight * 3 );
@@ -2228,6 +2235,10 @@ static void FindOutLightmaps( rawLightmap_t *lm ){
 				/* store color */
 				pixel = olm->bspLightBytes + ( ( ( oy * olm->customWidth ) + ox ) * 3 );
 				ColorToBytes( color, pixel, lm->brightness );
+
+				// hdr output data
+				pixel = olm->bspLightFloats + (((oy * olm->customWidth) + ox) * 3);
+				ColorScale(color, pixel, lm->brightness);
 
 				/* store direction */
 				if ( deluxemap ) {
@@ -2786,6 +2797,7 @@ void StoreSurfaceLightmaps( void ){
 		{
 			free( outLightmaps[ i ].lightBits );
 			free( outLightmaps[ i ].bspLightBytes );
+			free( outLightmaps[ i ].bspLightFloats);
 		}
 		free( outLightmaps );
 		outLightmaps = NULL;
@@ -2879,6 +2891,12 @@ void StoreSurfaceLightmaps( void ){
 			sprintf( filename, "%s/" EXTERNAL_LIGHTMAP, dirname, numExtLightmaps );
 			Sys_FPrintf( SYS_VRB, "\nwriting %s", filename );
 			WriteTGA24( filename, olm->bspLightBytes, olm->customWidth, olm->customHeight, qtrue );
+			
+			/* write HDR lightmap */
+			sprintf(filename, "%s/" EXTERNAL_HDR_LIGHTMAP, dirname, numExtLightmaps);
+			Sys_FPrintf(SYS_VRB, "\nwriting %s", filename);
+			int exportStatus = stbi_write_hdr(filename, olm->customWidth, olm->customHeight, 3, olm->bspLightFloats);
+
 			numExtLightmaps++;
 
 			/* write deluxemap */

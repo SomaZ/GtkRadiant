@@ -298,6 +298,7 @@
    ------------------------------------------------------------------------------- */
 
 #define EXTERNAL_LIGHTMAP       "lm_%04d.tga"
+#define EXTERNAL_HDR_LIGHTMAP   "lm_%04d.hdr"
 
 #define MAX_LIGHTMAPS           4           /* RBSP */
 #define MAX_LIGHT_STYLES        64
@@ -1390,6 +1391,8 @@ typedef struct outLightmap_s
 	byte                *lightBits;
 	byte                *bspLightBytes;
 	byte                *bspDirBytes;
+
+	float				*bspLightFloats; // for HDR Lightmaps
 }
 outLightmap_t;
 
