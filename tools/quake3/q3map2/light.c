@@ -1987,6 +1987,11 @@ int LightMain( int argc, char **argv ){
 			Sys_Printf( "Generating deluxemaps for average light direction\n" );
 		}
 
+		else if ( !strcmp(argv[i], "-hdr") ) {
+			hdr = qtrue;
+			Sys_Printf("Storing hdr lightmaps externally\n");
+		}
+
 		else if ( !strcmp( argv[ i ], "-external" ) ) {
 			externalLightmaps = qtrue;
 			Sys_Printf( "Storing all lightmaps externally\n" );

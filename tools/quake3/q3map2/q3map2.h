@@ -1758,6 +1758,7 @@ void                        RadFreeLights();
 
 /* light_ydnar.c */
 void                        ColorToBytes( const float *color, byte *colorBytes, float scale );
+void						ColorScaleHDR( const float *color, float *colorFloats, float scale );
 void                        SmoothNormals( void );
 
 void                        MapRawLightmap( int num );
@@ -2165,6 +2166,8 @@ Q_EXTERN qboolean noTrace Q_ASSIGN( qfalse );
 Q_EXTERN qboolean noSurfaces Q_ASSIGN( qfalse );
 Q_EXTERN qboolean patchShadows Q_ASSIGN( qfalse );
 Q_EXTERN qboolean cpmaHack Q_ASSIGN( qfalse );
+
+Q_EXTERN qboolean hdr Q_ASSIGN( qfalse );
 
 Q_EXTERN qboolean deluxemap Q_ASSIGN( qfalse );
 Q_EXTERN qboolean debugDeluxemap Q_ASSIGN( qfalse );
