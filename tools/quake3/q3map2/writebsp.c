@@ -420,6 +420,31 @@ void EndBSPFile( void ){
 	sprintf( path, "%s.bsp", source );
 	Sys_Printf( "Writing %s\n", path );
 	WriteBSPFile( path );
+
+	/* write tangent space info */
+	char tsPath[1024];
+	FILE            *tf;
+	/* note it */
+	Sys_Printf("--- WriteSurfaceExtraFile ---\n");
+
+	/* open the file */
+	strcpy(tsPath, path);
+	StripExtension(tsPath);
+	strcat(tsPath, ".tspace");
+	Sys_Printf("Writing %s\n", tsPath);
+	Sys_Printf("Vertices %i\n", numBSPDrawVerts);
+	tf = fopen(tsPath, "wb");
+	if (tf == NULL) {
+		Error("Error opening %s for writing", tsPath);
+	}
+
+	for (int i = 0; i < numBSPDrawVerts; i++)
+	{
+		SafeWrite(tf, &bspDrawVertsExt[i], sizeof(bspDrawVertsExt[0]));
+	}
+
+	/* close the file */
+	fclose(tf);
 }
 
 

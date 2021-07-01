@@ -2311,6 +2311,7 @@ static int FilterFlareSurfIntoTree( mapDrawSurface_t *ds, tree_t *tree ){
 void EmitDrawVerts( mapDrawSurface_t *ds, bspDrawSurface_t *out ){
 	int i, k;
 	bspDrawVert_t   *dv;
+	bspDrawVertExt_t *tangents;
 	shaderInfo_t    *si;
 	float offset;
 
@@ -2330,9 +2331,14 @@ void EmitDrawVerts( mapDrawSurface_t *ds, bspDrawSurface_t *out ){
 		}
 		IncDrawVerts();
 		dv = &bspDrawVerts[ numBSPDrawVerts - 1 ];
+		tangents = &bspDrawVertsExt[ numBSPDrawVerts - 1 ];
 
 		/* copy it */
 		memcpy( dv, &ds->verts[ i ], sizeof( *dv ) );
+		if (ds->vertTangents != NULL)
+			memcpy(tangents, &ds->vertTangents[i], sizeof(*tangents));
+		else
+			memset(tangents, 0, sizeof(*tangents));
 
 		/* offset? */
 		if ( offset != 0.0f ) {

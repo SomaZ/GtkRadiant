@@ -35,8 +35,7 @@
 
 /* dependencies */
 #include "q3map2.h"
-
-
+#include "MikkTSpace/mikktspace.h"
 
 /*
    PicoPrintFunc()
@@ -71,7 +70,83 @@ void PicoPrintFunc( int level, const char *str ){
 	}
 }
 
+typedef struct
+{
+	int numSurfaces;
+	bspDrawVert_t *vertices;
+	bspDrawVertExt_t *tangents;
+	int *indices;
+} BspMeshData;
 
+int GetNumFaces(const SMikkTSpaceContext * pContext)
+{
+	BspMeshData *meshData = (BspMeshData *)pContext->m_pUserData;
+	return meshData->numSurfaces;
+}
+
+int GetNumVertices(const SMikkTSpaceContext * pContext, const int iFace)
+{
+	// TODO: fix this when quads are supported for model loading
+	return 3;
+}
+
+void GetPosition(const SMikkTSpaceContext * pContext, float *fvPosOut, const int iFace, const int iVert)
+{
+	BspMeshData *meshData = (BspMeshData *)pContext->m_pUserData;
+	int index = meshData->indices[iFace * 3 + iVert];
+	VectorCopy(meshData->vertices[index].xyz, fvPosOut);
+}
+
+void GetNormalSurface(const SMikkTSpaceContext * pContext, float *fvNormOut, const int iFace, const int iVert)
+{
+	BspMeshData *meshData = (BspMeshData *)pContext->m_pUserData;
+	int index = meshData->indices[iFace * 3 + iVert];
+	VectorCopy(meshData->vertices[index].normal, fvNormOut);
+}
+
+void GetTexCoord(const SMikkTSpaceContext * pContext, float *fvTexcOut, const int iFace, const int iVert)
+{
+	BspMeshData *meshData = (BspMeshData *)pContext->m_pUserData;
+	int index = meshData->indices[iFace * 3 + iVert];
+	(fvTexcOut)[0] = (meshData->vertices[index].st)[0];
+	(fvTexcOut)[1] = (meshData->vertices[index].st)[1];
+}
+
+void SetTSpaceBasic(const SMikkTSpaceContext * pContext, const float *fvTangent, const float fSign, const int iFace, const int iVert)
+{
+	BspMeshData *meshData = (BspMeshData *)pContext->m_pUserData;
+	int index = meshData->indices[iFace * 3 + iVert];
+
+	meshData->tangents[index].tangent[0]	= fvTangent[0];
+	meshData->tangents[index].tangent[1]	= fvTangent[1];
+	meshData->tangents[index].tangent[2]	= fvTangent[2];
+	meshData->tangents[index].biTangentSign = -fSign; // flip bitangent because id tech 3 renders with frontface culling instead of backface culling
+}
+
+void CalcMikkTSpace(int numSurfaces, bspDrawVert_t *vertices, bspDrawVertExt_t *tangents, int *indices)
+{
+	SMikkTSpaceInterface tangentSpaceInterface;
+
+	tangentSpaceInterface.m_getNumFaces = GetNumFaces;
+	tangentSpaceInterface.m_getNumVerticesOfFace = GetNumVertices;
+	tangentSpaceInterface.m_getPosition = GetPosition;
+	tangentSpaceInterface.m_getNormal = GetNormalSurface;
+	tangentSpaceInterface.m_getTexCoord = GetTexCoord;
+	tangentSpaceInterface.m_setTSpaceBasic = SetTSpaceBasic;
+	tangentSpaceInterface.m_setTSpace = NULL;
+
+	BspMeshData meshData;
+	meshData.numSurfaces = numSurfaces;
+	meshData.vertices = vertices;
+	meshData.tangents = tangents;
+	meshData.indices = indices;
+
+	SMikkTSpaceContext modelContext;
+	modelContext.m_pUserData = &meshData;
+	modelContext.m_pInterface = &tangentSpaceInterface;
+
+	genTangSpaceDefault(&modelContext);
+}
 
 /*
    PicoLoadFileFunc()
@@ -274,8 +349,9 @@ void InsertModel( char *name, int frame, m4x4_t transform, remap_t *remap, shade
 			continue;
 		}
 
-		/* fix the surface's normals */
-		PicoFixSurfaceNormals( surface );
+		/* fixing normals destroys tangent space, so take care when to use this */
+		if (spawnFlags & 64) // spawnflag 64: fix the surface's normals
+			PicoFixSurfaceNormals( surface );
 
 		/* allocate a surface (ydnar: gs mods) */
 		ds = AllocDrawSurface( SURFACE_TRIANGLES );
@@ -357,12 +433,9 @@ void InsertModel( char *name, int frame, m4x4_t transform, remap_t *remap, shade
 			/* xyz and normal */
 			xyz = PicoGetSurfaceXYZ( surface, i );
 			VectorCopy( xyz, dv->xyz );
-			m4x4_transform_point( transform, dv->xyz );
 
 			normal = PicoGetSurfaceNormal( surface, i );
 			VectorCopy( normal, dv->normal );
-			m4x4_transform_normal( nTransform, dv->normal );
-			VectorNormalize( dv->normal, dv->normal );
 
 			/* ydnar: tek-fu celshading support for flat shaded shit */
 			if ( flat ) {
@@ -372,9 +445,15 @@ void InsertModel( char *name, int frame, m4x4_t transform, remap_t *remap, shade
 
 			/* ydnar: gs mods: added support for explicit shader texcoord generation */
 			else if ( si->tcGen ) {
+
+				/* need to transform the vertex position to get the correct result */
+				vec3_t pos_;
+				VectorCopy(dv->xyz, pos_);
+				m4x4_transform_point(transform, pos_);
+
 				/* project the texture */
-				dv->st[ 0 ] = DotProduct( si->vecs[ 0 ], dv->xyz );
-				dv->st[ 1 ] = DotProduct( si->vecs[ 1 ], dv->xyz );
+				dv->st[ 0 ] = DotProduct( si->vecs[ 0 ], pos_);
+				dv->st[ 1 ] = DotProduct( si->vecs[ 1 ], pos_);
 			}
 
 			/* normal texture coordinates */
@@ -411,6 +490,26 @@ void InsertModel( char *name, int frame, m4x4_t transform, remap_t *remap, shade
 		indexes = PicoGetSurfaceIndexes( surface, 0 );
 		for ( i = 0; i < ds->numIndexes; i++ )
 			ds->indexes[ i ] = indexes[ i ];
+
+		/* compute tangent space before transforming vertices */
+		ds->vertTangents = safe_malloc(ds->numVerts * sizeof(ds->vertTangents[0]));
+		memset(ds->vertTangents, 0, ds->numVerts * sizeof(ds->vertTangents[0]));
+		CalcMikkTSpace(ds->numIndexes / 3, ds->verts, ds->vertTangents, ds->indexes);
+
+		/* transform vertices */
+		for (i = 0; i < ds->numVerts; i++)
+		{
+			/* get vertex */
+			dv = &ds->verts[i];
+
+			/* transform vertex */
+			m4x4_transform_point(transform, dv->xyz);
+			m4x4_transform_normal(nTransform, dv->normal);
+			m4x4_transform_normal(nTransform, ds->vertTangents[i].tangent);
+
+			VectorNormalize(dv->normal, dv->normal);
+			VectorNormalize(ds->vertTangents[i].tangent, ds->vertTangents[i].tangent);
+		}
 
 		/* set cel shader */
 		ds->celShader = celShader;

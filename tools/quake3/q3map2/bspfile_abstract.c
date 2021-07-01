@@ -65,10 +65,11 @@ void IncDrawVerts(){
 		numBSPDrawVertsBuffer = MAX_MAP_DRAW_VERTS / 37;
 
 		bspDrawVerts = safe_malloc_info( sizeof( bspDrawVert_t ) * numBSPDrawVertsBuffer, "IncDrawVerts" );
-
+		bspDrawVertsExt = safe_malloc_info(sizeof(bspDrawVertExt_t) * numBSPDrawVertsBuffer, "IncDrawVertsExt");
 	}
 	else if ( numBSPDrawVerts > numBSPDrawVertsBuffer ) {
 		bspDrawVert_t *newBspDrawVerts;
+		bspDrawVertExt_t *newBspDrawVertsExt;
 
 		numBSPDrawVertsBuffer *= 3; // multiply by 1.5
 		numBSPDrawVertsBuffer /= 2;
@@ -78,6 +79,7 @@ void IncDrawVerts(){
 		}
 
 		newBspDrawVerts = realloc( bspDrawVerts, sizeof( bspDrawVert_t ) * numBSPDrawVertsBuffer );
+		newBspDrawVertsExt = realloc(bspDrawVertsExt, sizeof(bspDrawVertExt_t) * numBSPDrawVertsBuffer);
 
 		if ( !newBspDrawVerts ) {
 			free (bspDrawVerts);
@@ -85,9 +87,11 @@ void IncDrawVerts(){
 		}
 
 		bspDrawVerts = newBspDrawVerts;
+		bspDrawVertsExt = newBspDrawVertsExt;
 	}
 
 	memset( bspDrawVerts + ( numBSPDrawVerts - 1 ), 0, sizeof( bspDrawVert_t ) );
+	memset( bspDrawVertsExt + (numBSPDrawVerts - 1), 0, sizeof(bspDrawVertExt_t) );
 }
 
 void SetDrawVerts( int n ){
@@ -99,8 +103,10 @@ void SetDrawVerts( int n ){
 	numBSPDrawVertsBuffer = numBSPDrawVerts;
 
 	bspDrawVerts = safe_malloc_info( sizeof( bspDrawVert_t ) * numBSPDrawVertsBuffer, "IncDrawVerts" );
+	bspDrawVertsExt = safe_malloc_info(sizeof(bspDrawVertExt_t) * numBSPDrawVertsBuffer, "IncDrawVertsExt");
 
 	memset( bspDrawVerts, 0, n * sizeof( bspDrawVert_t ) );
+	memset(bspDrawVertsExt, 0, n * sizeof( bspDrawVertExt_t ) );
 }
 
 int numBSPDrawSurfacesBuffer = 0;
@@ -132,6 +138,7 @@ void SetDrawSurfaces( int n ){
 void BSPFilesCleanup(){
 	if ( bspDrawVerts != 0 ) {
 		free( bspDrawVerts );
+		free( bspDrawVertsExt );
 	}
 	if ( bspDrawSurfaces != 0 ) {
 		free( bspDrawSurfaces );
